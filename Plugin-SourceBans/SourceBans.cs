@@ -5,10 +5,14 @@
 
 namespace SevenMod.Plugin.SourceBans
 {
+    using System;
+    using System.Collections.Generic;
+    using System.Data;
     using SevenMod.Admin;
     using SevenMod.Console;
     using SevenMod.ConVar;
     using SevenMod.Core;
+    using SevenMod.Database;
 
     /// <summary>
     /// Plugin that periodically shows messages in chat.
@@ -65,6 +69,11 @@ namespace SevenMod.Plugin.SourceBans
         /// </summary>
         private ConVarValue serverId;
 
+        /// <summary>
+        /// Represents the database connection.
+        /// </summary>
+        private Database database;
+
         /// <inheritdoc/>
         public override PluginInfo Info => new PluginInfo
         {
@@ -92,6 +101,10 @@ namespace SevenMod.Plugin.SourceBans
             this.serverId = this.CreateConVar("SBServerId", "0", "This is the ID of this server (Check in the admin panel -> servers to find the ID of this server)").Value;
 
             this.AutoExecConfig(true, "SourceBans");
+
+            this.enableAdmins.ConVar.ConVarChanged += this.OnEnableAdminsChanged;
+            this.requireSiteLogin.ConVar.ConVarChanged += this.OnRequireSiteLoginChanged;
+            this.serverId.ConVar.ConVarChanged += this.OnServerIdChanged;
         }
 
         /// <inheritdoc/>
@@ -104,6 +117,85 @@ namespace SevenMod.Plugin.SourceBans
             this.RegAdminCmd("banip", AdminFlags.Ban, "sm_banip <ip|#userid|name> <time> [reason]").Executed += this.OnBanipCommandExecuted;
             this.RegAdminCmd("addban", AdminFlags.RCON, "sm_addban <time> <steamid> [reason]").Executed += this.OnAddbanCommandExecuted;
             this.RegAdminCmd("unban", AdminFlags.Unban, "sm_unban <steamid|ip> [reason]").Executed += this.OnUnbanCommandExecuted;
+
+            this.database = Database.Connect("sourcebans");
+        }
+
+        /// <inheritdoc/>
+        public override void ReloadAdmins()
+        {
+            base.ReloadAdmins();
+
+            if (!this.enableAdmins.AsBool)
+            {
+                return;
+            }
+
+            var prefix = this.databasePrefix.AsString;
+
+            var groups = new Dictionary<string, GroupInfo>();
+            var results = this.database.TQuery($"SELECT name, flags, immunity FROM {prefix}_srvgroups ORDER BY id");
+            foreach (DataRow row in results.Rows)
+            {
+                var name = row.ItemArray.GetValue(0).ToString();
+                if (string.IsNullOrEmpty(name))
+                {
+                    continue;
+                }
+
+                var flags = row.ItemArray.GetValue(1).ToString();
+                int.TryParse(row.ItemArray.GetValue(2).ToString(), out var immunity);
+
+                groups.Add(name, new GroupInfo(name, immunity, flags));
+            }
+
+            var queryLastLogin = this.requireSiteLogin.AsBool ? "lastvisit IS NOT NULL AND lastvisit != '' AND " : string.Empty;
+            results = this.database.TQuery($"SELECT authid, (SELECT name FROM {prefix}_srvgroups WHERE name = srv_group AND flags != '') AS srv_group, srv_flags, immunity FROM {prefix}_admins_servers_groups AS asg LEFT JOIN {prefix}_admins AS a ON a.aid = asg.admin_id WHERE {queryLastLogin}server_id = {this.serverId.AsInt} OR srv_group_id = ANY(SELECT group_id FROM {prefix}_servers_groups WHERE server_id = {this.serverId.AsInt}) GROUP BY aid, authid, srv_password, srv_group, srv_flags, user");
+            foreach (DataRow row in results.Rows)
+            {
+                var identity = row.ItemArray.GetValue(0).ToString();
+                var groupName = row.ItemArray.GetValue(1).ToString();
+                var flags = row.ItemArray.GetValue(2).ToString();
+                int.TryParse(row.ItemArray.GetValue(3).ToString(), out var immunity);
+
+                if (groups.TryGetValue(groupName, out var group))
+                {
+                    flags += group.Flags;
+                    immunity = Math.Max(immunity, group.Immunity);
+                }
+
+                AdminManager.AddAdmin(identity, immunity, flags);
+            }
+        }
+
+        /// <summary>
+        /// Called when the value of the SBEnableAdmins <see cref="ConVar"/> is changed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="ConVarChangedEventArgs"/> object containing the event data.</param>
+        private void OnEnableAdminsChanged(object sender, ConVarChangedEventArgs e)
+        {
+            AdminManager.ReloadAdmins();
+        }
+
+        /// <summary>
+        /// Called when the value of the SBRequireSiteLogin <see cref="ConVar"/> is changed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="ConVarChangedEventArgs"/> object containing the event data.</param>
+        private void OnRequireSiteLoginChanged(object sender, ConVarChangedEventArgs e)
+        {
+            AdminManager.ReloadAdmins();
+        }
+
+        /// <summary>
+        /// Called when the value of the SBServerId <see cref="ConVar"/> is changed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="ConVarChangedEventArgs"/> object containing the event data.</param>
+        private void OnServerIdChanged(object sender, ConVarChangedEventArgs e)
+        {
+            AdminManager.ReloadAdmins();
         }
 
         /// <summary>
@@ -113,6 +205,10 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="e">An <see cref="AdminCommandEventArgs"/> object containing the event data.</param>
         private void OnRehashCommandExecuted(object sender, AdminCommandEventArgs e)
         {
+            if (this.enableAdmins.AsBool)
+            {
+                AdminManager.ReloadAdmins();
+            }
         }
 
         /// <summary>
