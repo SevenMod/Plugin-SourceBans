@@ -101,10 +101,6 @@ namespace SevenMod.Plugin.SourceBans
             this.serverId = this.CreateConVar("SBServerId", "0", "This is the ID of this server (Check in the admin panel -> servers to find the ID of this server)").Value;
 
             this.AutoExecConfig(true, "SourceBans");
-
-            this.enableAdmins.ConVar.ConVarChanged += this.OnEnableAdminsChanged;
-            this.requireSiteLogin.ConVar.ConVarChanged += this.OnRequireSiteLoginChanged;
-            this.serverId.ConVar.ConVarChanged += this.OnServerIdChanged;
         }
 
         /// <inheritdoc/>
@@ -119,6 +115,10 @@ namespace SevenMod.Plugin.SourceBans
             this.RegAdminCmd("unban", AdminFlags.Unban, "sm_unban <steamid|ip> [reason]").Executed += this.OnUnbanCommandExecuted;
 
             this.database = Database.Connect("sourcebans");
+
+            this.enableAdmins.ConVar.ConVarChanged += this.OnEnableAdminsChanged;
+            this.requireSiteLogin.ConVar.ConVarChanged += this.OnRequireSiteLoginChanged;
+            this.serverId.ConVar.ConVarChanged += this.OnServerIdChanged;
         }
 
         /// <inheritdoc/>
