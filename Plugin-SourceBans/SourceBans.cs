@@ -110,9 +110,9 @@ namespace SevenMod.Plugin.SourceBans
 
             this.RegAdminCmd("rehash", AdminFlags.RCON, "Reload SQL admins").Executed += this.OnRehashCommandExecuted;
             this.RegAdminCmd("ban", AdminFlags.Ban, "sm ban <#userid|name> <minutes|0> [reason]").Executed += this.OnBanCommandExecuted;
-            this.RegAdminCmd("banip", AdminFlags.Ban, "sm_banip <ip|#userid|name> <time> [reason]").Executed += this.OnBanipCommandExecuted;
-            this.RegAdminCmd("addban", AdminFlags.RCON, "sm_addban <time> <steamid> [reason]").Executed += this.OnAddbanCommandExecuted;
-            this.RegAdminCmd("unban", AdminFlags.Unban, "sm_unban <steamid|ip> [reason]").Executed += this.OnUnbanCommandExecuted;
+            this.RegAdminCmd("banip", AdminFlags.Ban, "sm banip <ip|#userid|name> <time> [reason]").Executed += this.OnBanipCommandExecuted;
+            this.RegAdminCmd("addban", AdminFlags.RCON, "sm addban <time> <steamid> [reason]").Executed += this.OnAddbanCommandExecuted;
+            this.RegAdminCmd("unban", AdminFlags.Unban, "sm unban <steamid|ip> [reason]").Executed += this.OnUnbanCommandExecuted;
 
             this.database = Database.Connect("sourcebans");
 
