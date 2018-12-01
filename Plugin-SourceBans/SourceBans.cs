@@ -85,10 +85,8 @@ namespace SevenMod.Plugin.SourceBans
         };
 
         /// <inheritdoc/>
-        public override void LoadPlugin()
+        public override void OnLoadPlugin()
         {
-            base.LoadPlugin();
-
             this.website = this.CreateConVar("SBWebsite", string.Empty, "Website address to tell the player where to go for unban, etc").Value;
             this.addban = this.CreateConVar("SBAddban", "True", "Allow or disallow admins access to addban command").Value;
             this.unban = this.CreateConVar("SBUnban", "True", "Allow or disallow admins access to unban command").Value;
@@ -104,9 +102,11 @@ namespace SevenMod.Plugin.SourceBans
         }
 
         /// <inheritdoc/>
-        public override void ConfigsExecuted()
+        public override void OnConfigsExecuted()
         {
-            base.ConfigsExecuted();
+            this.database = Database.Connect("sourcebans");
+
+            PluginManager.Unload("BaseBans");
 
             this.RegAdminCmd("rehash", AdminFlags.RCON, "Reload SQL admins").Executed += this.OnRehashCommandExecuted;
             this.RegAdminCmd("ban", AdminFlags.Ban, "sm ban <#userid|name> <minutes|0> [reason]").Executed += this.OnBanCommandExecuted;
@@ -114,18 +114,14 @@ namespace SevenMod.Plugin.SourceBans
             this.RegAdminCmd("addban", AdminFlags.RCON, "sm addban <time> <steamid> [reason]").Executed += this.OnAddbanCommandExecuted;
             this.RegAdminCmd("unban", AdminFlags.Unban, "sm unban <steamid|ip> [reason]").Executed += this.OnUnbanCommandExecuted;
 
-            this.database = Database.Connect("sourcebans");
-
-            this.enableAdmins.ConVar.ConVarChanged += this.OnEnableAdminsChanged;
-            this.requireSiteLogin.ConVar.ConVarChanged += this.OnRequireSiteLoginChanged;
-            this.serverId.ConVar.ConVarChanged += this.OnServerIdChanged;
+            this.enableAdmins.ConVar.ValueChanged += this.OnEnableAdminsChanged;
+            this.requireSiteLogin.ConVar.ValueChanged += this.OnRequireSiteLoginChanged;
+            this.serverId.ConVar.ValueChanged += this.OnServerIdChanged;
         }
 
         /// <inheritdoc/>
-        public override void ReloadAdmins()
+        public override void OnReloadAdmins()
         {
-            base.ReloadAdmins();
-
             if (!this.enableAdmins.AsBool)
             {
                 return;
