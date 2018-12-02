@@ -8,6 +8,7 @@ namespace SevenMod.Plugin.SourceBans
     using System;
     using System.Collections.Generic;
     using System.Data;
+    using System.Text;
     using SevenMod.Admin;
     using SevenMod.Console;
     using SevenMod.ConVar;
@@ -162,6 +163,48 @@ namespace SevenMod.Plugin.SourceBans
 
                 AdminManager.AddAdmin(identity, immunity, flags);
             }
+        }
+
+        /// <inheritdoc/>
+        public override bool OnPlayerLogin(ClientInfo client, StringBuilder rejectReason)
+        {
+            var prefix = this.databasePrefix.AsString;
+            var auth = this.GetAuth(client.playerId).Substring(8);
+            var ip = this.database.Escape(client.ip);
+            var results = this.database.TQuery($"SELECT bid, ip FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR (type = 1 AND ip = '{ip}')) AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL");
+
+            if (results.Rows.Count > 0)
+            {
+                var bid = results.Rows[0].ItemArray.GetValue(0).ToString();
+
+                if (string.IsNullOrEmpty(results.Rows[0].ItemArray.GetValue(1).ToString()))
+                {
+                    this.database.FastQuery($"UPDATE {prefix}_bans SET `ip` = '{ip}' WHERE `bid` = '{bid}'");
+                }
+
+                var name = this.database.Escape(client.playerName);
+                this.database.FastQuery($"INSERT INTO {prefix}_banlog (sid, time, name, bid) VALUES ({this.serverId.AsInt}, UNIX_TIMESTAMP(), '{name}', (SELECT bid FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR(type = 1 AND ip = '{client.ip}')) AND RemoveType IS NULL LIMIT 0, 1))");
+
+                rejectReason.AppendLine($"You have been banned by this server, check {this.website.AsString} for more info");
+                return false;
+            }
+
+            return base.OnPlayerLogin(client, rejectReason);
+        }
+
+        /// <summary>
+        /// Converts a SteamID64 to a SteamID.
+        /// </summary>
+        /// <param name="playerId">The SteamID64.</param>
+        /// <returns>The SteamID.</returns>
+        private string GetAuth(string playerId)
+        {
+            long.TryParse(playerId, out var id);
+            id -= 76561197960265728L;
+            var p1 = id % 2;
+            var p2 = (id - p1) / 2;
+
+            return $"STEAM_0:{p1}:{p2}";
         }
 
         /// <summary>

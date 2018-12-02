@@ -33,6 +33,9 @@
     <DocumentationFile>bin\Release\Plugin.SourceBans.xml</DocumentationFile>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>..\7dtd-binaries\Assembly-CSharp.dll</HintPath>
+    </Reference>
     <Reference Include="SevenMod, Version=0.1.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\lib\SevenMod.dll</HintPath>
