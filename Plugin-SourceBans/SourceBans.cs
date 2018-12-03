@@ -10,6 +10,7 @@ namespace SevenMod.Plugin.SourceBans
     using System.Data;
     using System.Text;
     using SevenMod.Admin;
+    using SevenMod.Chat;
     using SevenMod.Console;
     using SevenMod.ConVar;
     using SevenMod.Core;
@@ -257,6 +258,40 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="e">An <see cref="AdminCommandEventArgs"/> object containing the event data.</param>
         private void OnBanCommandExecuted(object sender, AdminCommandEventArgs e)
         {
+            if (e.Arguments.Count < 2)
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, "Usage: sm ban <#userid|name> <time|0> [reason]");
+                return;
+            }
+
+            if (!uint.TryParse(e.Arguments[1], out var duration))
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, "Invaid ban duration");
+                return;
+            }
+
+            if (duration == 0 && !AdminManager.CheckAccess(e.SenderInfo.RemoteClientInfo, AdminFlags.Unban))
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, "You do not have perm ban permission.");
+                return;
+            }
+
+            var target = SMConsoleHelper.ParseSingleTargetString(e.SenderInfo, e.Arguments[0]);
+            if (target != null)
+            {
+                var prefix = this.databasePrefix.AsString;
+                var auth = this.GetAuth(target.playerId);
+                var name = this.database.Escape(target.playerName);
+                duration *= 60;
+                var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
+                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? this.GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
+                var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
+                this.database.FastQuery($"INSERT INTO {prefix}_bans (ip, authid, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES ('{target.ip}', '{auth}', '{name}', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
+
+                SdtdConsole.Instance.ExecuteSync($"kick {target.playerId} \"You have been banned by this server, check {this.website.AsString} for more info\"", null);
+
+                ChatHelper.ReplyToCommand(e.SenderInfo, $"{name} has been banned.");
+            }
         }
 
         /// <summary>
@@ -266,6 +301,39 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="e">An <see cref="AdminCommandEventArgs"/> object containing the event data.</param>
         private void OnBanipCommandExecuted(object sender, AdminCommandEventArgs e)
         {
+            if (e.Arguments.Count < 2)
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, "Usage: sm banip <ip|#userid|name> <time> [reason]");
+                return;
+            }
+
+            if (!uint.TryParse(e.Arguments[1], out var duration))
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, "Invaid ban duration");
+                return;
+            }
+
+            if (duration == 0 && !AdminManager.CheckAccess(e.SenderInfo.RemoteClientInfo, AdminFlags.Unban))
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, "You do not have perm ban permission.");
+                return;
+            }
+
+            var target = SMConsoleHelper.ParseSingleTargetString(e.SenderInfo, e.Arguments[0]);
+            if (target != null)
+            {
+                var prefix = this.databasePrefix.AsString;
+                var name = this.database.Escape(target.playerName);
+                duration *= 60;
+                var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
+                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? this.GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
+                var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
+                this.database.FastQuery($"INSERT INTO {prefix}_bans (type, ip, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES (1, '{target.ip}', '{name}', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
+
+                SdtdConsole.Instance.ExecuteSync($"kick {target.playerId} \"You have been banned by this server, check {this.website.AsString} for more info\"", null);
+
+                ChatHelper.ReplyToCommand(e.SenderInfo, $"{name} has been banned.");
+            }
         }
 
         /// <summary>
@@ -275,6 +343,47 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="e">An <see cref="AdminCommandEventArgs"/> object containing the event data.</param>
         private void OnAddbanCommandExecuted(object sender, AdminCommandEventArgs e)
         {
+            if (!this.addban.AsBool)
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, "The addban command is disabled.");
+                return;
+            }
+
+            if (e.Arguments.Count < 2)
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, "Usage: sm addban <time> <steamid> [reason]");
+                return;
+            }
+
+            if (!uint.TryParse(e.Arguments[0], out var duration))
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, "Invaid ban duration");
+                return;
+            }
+
+            if (duration == 0 && !AdminManager.CheckAccess(e.SenderInfo.RemoteClientInfo, AdminFlags.Unban))
+            {
+                return;
+            }
+
+            if (SteamUtils.NormalizeSteamId(e.Arguments[1], out var playerId))
+            {
+                var prefix = this.databasePrefix.AsString;
+                var auth = this.GetAuth(playerId);
+                duration *= 60;
+                var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
+                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? this.GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
+                var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
+                this.database.FastQuery($"INSERT INTO {prefix}_bans (authid, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES ('{auth}', '', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
+
+                SdtdConsole.Instance.ExecuteSync($"kick {playerId} \"You have been banned by this server, check {this.website.AsString} for more info\"", null);
+
+                ChatHelper.ReplyToCommand(e.SenderInfo, $"{e.Arguments[1]} has been banned.");
+            }
+            else
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, $"{e.Arguments[1]} is not a valid SteamID.");
+            }
         }
 
         /// <summary>
@@ -284,6 +393,43 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="e">An <see cref="AdminCommandEventArgs"/> object containing the event data.</param>
         private void OnUnbanCommandExecuted(object sender, AdminCommandEventArgs e)
         {
+            if (!this.unban.AsBool)
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, $"The unban command is disabled. You must use the Web interface at {this.website.AsString}.");
+                return;
+            }
+
+            if (e.Arguments.Count < 1)
+            {
+                ChatHelper.ReplyToCommand(e.SenderInfo, "Usage: sm unban <steamid|ip> [reason]");
+                return;
+            }
+
+            var prefix = this.databasePrefix.AsString;
+            DataTable results;
+            if (SteamUtils.NormalizeSteamId(e.Arguments[0], out var playerId))
+            {
+                var auth = this.GetAuth(playerId);
+                results = this.database.TQuery($"SELECT bid FROM {prefix}_bans WHERE (type = 0 AND authid = '{auth}') AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL");
+            }
+            else
+            {
+                var ip = this.database.Escape(e.Arguments[0]);
+                results = this.database.TQuery($"SELECT bid FROM {prefix}_bans WHERE (type = 1 AND ip = '{ip}') AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL");
+            }
+
+            if (results.Rows.Count == 0)
+            {
+                return;
+            }
+
+            var bid = results.Rows[0].ItemArray.GetValue(0).ToString();
+            var reason = (e.Arguments.Count > 1) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(1, e.Arguments.Count - 1).ToArray())) : string.Empty;
+            var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? this.GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
+            var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
+            this.database.FastQuery($"UPDATE {prefix}_bans SET RemovedBy = (SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), RemoveType = 'U', RemovedOn = UNIX_TIMESTAMP(), ureason = '{reason}' WHERE bid = {bid}");
+
+            ChatHelper.ReplyToCommand(e.SenderInfo, $"{e.Arguments[0]} has been unbanned.");
         }
     }
 }
