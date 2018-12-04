@@ -129,66 +129,16 @@ namespace SevenMod.Plugin.SourceBans
                 return;
             }
 
-            var prefix = this.databasePrefix.AsString;
-
-            var groups = new Dictionary<string, GroupInfo>();
-            var results = this.database.TQuery($"SELECT name, flags, immunity FROM {prefix}_srvgroups ORDER BY id");
-            foreach (DataRow row in results.Rows)
-            {
-                var name = row.ItemArray.GetValue(0).ToString();
-                if (string.IsNullOrEmpty(name))
-                {
-                    continue;
-                }
-
-                var flags = row.ItemArray.GetValue(1).ToString();
-                int.TryParse(row.ItemArray.GetValue(2).ToString(), out var immunity);
-
-                groups.Add(name, new GroupInfo(name, immunity, flags));
-            }
-
-            var queryLastLogin = this.requireSiteLogin.AsBool ? "lastvisit IS NOT NULL AND lastvisit != '' AND " : string.Empty;
-            results = this.database.TQuery($"SELECT authid, (SELECT name FROM {prefix}_srvgroups WHERE name = srv_group AND flags != '') AS srv_group, srv_flags, immunity FROM {prefix}_admins_servers_groups AS asg LEFT JOIN {prefix}_admins AS a ON a.aid = asg.admin_id WHERE {queryLastLogin}server_id = {this.serverId.AsInt} OR srv_group_id = ANY(SELECT group_id FROM {prefix}_servers_groups WHERE server_id = {this.serverId.AsInt}) GROUP BY aid, authid, srv_password, srv_group, srv_flags, user");
-            foreach (DataRow row in results.Rows)
-            {
-                var identity = row.ItemArray.GetValue(0).ToString();
-                var groupName = row.ItemArray.GetValue(1).ToString();
-                var flags = row.ItemArray.GetValue(2).ToString();
-                int.TryParse(row.ItemArray.GetValue(3).ToString(), out var immunity);
-
-                if (groups.TryGetValue(groupName, out var group))
-                {
-                    flags += group.Flags;
-                    immunity = Math.Max(immunity, group.Immunity);
-                }
-
-                AdminManager.AddAdmin(identity, immunity, flags);
-            }
+            this.database.TQuery($"SELECT name, flags, immunity FROM {this.databasePrefix.AsString}_srvgroups ORDER BY id").QueryCompleted += this.OnGroupsQueryCompleted;
         }
 
         /// <inheritdoc/>
         public override bool OnPlayerLogin(ClientInfo client, StringBuilder rejectReason)
         {
             var prefix = this.databasePrefix.AsString;
-            var auth = this.GetAuth(client.playerId).Substring(8);
+            var auth = GetAuth(client.playerId).Substring(8);
             var ip = this.database.Escape(client.ip);
-            var results = this.database.TQuery($"SELECT bid, ip FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR (type = 1 AND ip = '{ip}')) AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL");
-
-            if (results.Rows.Count > 0)
-            {
-                var bid = results.Rows[0].ItemArray.GetValue(0).ToString();
-
-                if (string.IsNullOrEmpty(results.Rows[0].ItemArray.GetValue(1).ToString()))
-                {
-                    this.database.FastQuery($"UPDATE {prefix}_bans SET `ip` = '{ip}' WHERE `bid` = '{bid}'");
-                }
-
-                var name = this.database.Escape(client.playerName);
-                this.database.FastQuery($"INSERT INTO {prefix}_banlog (sid, time, name, bid) VALUES ({this.serverId.AsInt}, UNIX_TIMESTAMP(), '{name}', (SELECT bid FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR(type = 1 AND ip = '{client.ip}')) AND RemoveType IS NULL LIMIT 0, 1))");
-
-                rejectReason.AppendLine($"You have been banned by this server, check {this.website.AsString} for more info");
-                return false;
-            }
+            this.database.TQuery($"SELECT bid, ip FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR (type = 1 AND ip = '{ip}')) AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL", client).QueryCompleted += this.OnCheckPlayerBansQueryCompleted;
 
             return base.OnPlayerLogin(client, rejectReason);
         }
@@ -198,7 +148,7 @@ namespace SevenMod.Plugin.SourceBans
         /// </summary>
         /// <param name="playerId">The SteamID64.</param>
         /// <returns>The SteamID.</returns>
-        private string GetAuth(string playerId)
+        private static string GetAuth(string playerId)
         {
             long.TryParse(playerId, out var id);
             id -= 76561197960265728L;
@@ -276,19 +226,18 @@ namespace SevenMod.Plugin.SourceBans
                 return;
             }
 
-            var target = SMConsoleHelper.ParseSingleTargetString(e.SenderInfo, e.Arguments[0]);
-            if (target != null)
+            if (SMConsoleHelper.ParseSingleTargetString(e.SenderInfo, e.Arguments[0], out var target))
             {
                 var prefix = this.databasePrefix.AsString;
-                var auth = this.GetAuth(target.playerId);
+                var auth = GetAuth(target.playerId);
                 var name = this.database.Escape(target.playerName);
                 duration *= 60;
                 var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
-                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? this.GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
+                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
                 var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
-                this.database.FastQuery($"INSERT INTO {prefix}_bans (ip, authid, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES ('{target.ip}', '{auth}', '{name}', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
+                this.database.TFastQuery($"INSERT INTO {prefix}_bans (ip, authid, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES ('{target.ip}', '{auth}', '{name}', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
 
-                SdtdConsole.Instance.ExecuteSync($"kick {target.playerId} \"You have been banned by this server, check {this.website.AsString} for more info\"", null);
+                SdtdConsole.Instance.ExecuteSync($"kick {target.playerId} \"You have been banned from this server, check {this.website.AsString} for more info\"", null);
 
                 ChatHelper.ReplyToCommand(e.SenderInfo, $"{name} has been banned.");
             }
@@ -319,16 +268,15 @@ namespace SevenMod.Plugin.SourceBans
                 return;
             }
 
-            var target = SMConsoleHelper.ParseSingleTargetString(e.SenderInfo, e.Arguments[0]);
-            if (target != null)
+            if (SMConsoleHelper.ParseSingleTargetString(e.SenderInfo, e.Arguments[0], out var target))
             {
                 var prefix = this.databasePrefix.AsString;
                 var name = this.database.Escape(target.playerName);
                 duration *= 60;
                 var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
-                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? this.GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
+                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
                 var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
-                this.database.FastQuery($"INSERT INTO {prefix}_bans (type, ip, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES (1, '{target.ip}', '{name}', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
+                this.database.TFastQuery($"INSERT INTO {prefix}_bans (type, ip, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES (1, '{target.ip}', '{name}', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
 
                 SdtdConsole.Instance.ExecuteSync($"kick {target.playerId} \"You have been banned by this server, check {this.website.AsString} for more info\"", null);
 
@@ -369,14 +317,14 @@ namespace SevenMod.Plugin.SourceBans
             if (SteamUtils.NormalizeSteamId(e.Arguments[1], out var playerId))
             {
                 var prefix = this.databasePrefix.AsString;
-                var auth = this.GetAuth(playerId);
+                var auth = GetAuth(playerId);
                 duration *= 60;
                 var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
-                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? this.GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
+                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
                 var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
-                this.database.FastQuery($"INSERT INTO {prefix}_bans (authid, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES ('{auth}', '', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
+                this.database.TFastQuery($"INSERT INTO {prefix}_bans (authid, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES ('{auth}', '', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
 
-                SdtdConsole.Instance.ExecuteSync($"kick {playerId} \"You have been banned by this server, check {this.website.AsString} for more info\"", null);
+                SdtdConsole.Instance.ExecuteSync($"kick {playerId} \"You are banned from this server, check {this.website.AsString} for more info\"", null);
 
                 ChatHelper.ReplyToCommand(e.SenderInfo, $"{e.Arguments[1]} has been banned.");
             }
@@ -406,30 +354,116 @@ namespace SevenMod.Plugin.SourceBans
             }
 
             var prefix = this.databasePrefix.AsString;
-            DataTable results;
             if (SteamUtils.NormalizeSteamId(e.Arguments[0], out var playerId))
             {
-                var auth = this.GetAuth(playerId);
-                results = this.database.TQuery($"SELECT bid FROM {prefix}_bans WHERE (type = 0 AND authid = '{auth}') AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL");
+                var auth = GetAuth(playerId);
+                this.database.TQuery($"SELECT bid FROM {prefix}_bans WHERE (type = 0 AND authid = '{auth}') AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL", e).QueryCompleted += this.OnUnbanQueryCompleted;
             }
             else
             {
                 var ip = this.database.Escape(e.Arguments[0]);
-                results = this.database.TQuery($"SELECT bid FROM {prefix}_bans WHERE (type = 1 AND ip = '{ip}') AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL");
+                this.database.TQuery($"SELECT bid FROM {prefix}_bans WHERE (type = 1 AND ip = '{ip}') AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL", e).QueryCompleted += this.OnUnbanQueryCompleted;
             }
+        }
 
-            if (results.Rows.Count == 0)
+        /// <summary>
+        /// Called when the admin groups query has completed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
+        private void OnGroupsQueryCompleted(object sender, QueryCompletedEventArgs e)
+        {
+            var groups = new Dictionary<string, GroupInfo>();
+            foreach (DataRow row in e.Results.Rows)
             {
-                return;
+                var name = row.ItemArray.GetValue(0).ToString();
+                if (string.IsNullOrEmpty(name))
+                {
+                    continue;
+                }
+
+                var flags = row.ItemArray.GetValue(1).ToString();
+                int.TryParse(row.ItemArray.GetValue(2).ToString(), out var immunity);
+
+                groups.Add(name, new GroupInfo(name, immunity, flags));
             }
 
-            var bid = results.Rows[0].ItemArray.GetValue(0).ToString();
-            var reason = (e.Arguments.Count > 1) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(1, e.Arguments.Count - 1).ToArray())) : string.Empty;
-            var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? this.GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
-            var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
-            this.database.FastQuery($"UPDATE {prefix}_bans SET RemovedBy = (SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), RemoveType = 'U', RemovedOn = UNIX_TIMESTAMP(), ureason = '{reason}' WHERE bid = {bid}");
+            var prefix = this.databasePrefix.AsString;
+            var queryLastLogin = this.requireSiteLogin.AsBool ? "lastvisit IS NOT NULL AND lastvisit != '' AND " : string.Empty;
+            this.database.TQuery($"SELECT authid, (SELECT name FROM {prefix}_srvgroups WHERE name = srv_group AND flags != '') AS srv_group, srv_flags, immunity FROM {prefix}_admins_servers_groups AS asg LEFT JOIN {prefix}_admins AS a ON a.aid = asg.admin_id WHERE {queryLastLogin}server_id = {this.serverId.AsInt} OR srv_group_id = ANY(SELECT group_id FROM {prefix}_servers_groups WHERE server_id = {this.serverId.AsInt}) GROUP BY aid, authid, srv_password, srv_group, srv_flags, user", groups).QueryCompleted += this.OnAdminsQueryCompleted;
+        }
 
-            ChatHelper.ReplyToCommand(e.SenderInfo, $"{e.Arguments[0]} has been unbanned.");
+        /// <summary>
+        /// Called when the admin users query has completed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
+        private void OnAdminsQueryCompleted(object sender, QueryCompletedEventArgs e)
+        {
+            var groups = (Dictionary<string, GroupInfo>)e.Data;
+            foreach (DataRow row in e.Results.Rows)
+            {
+                var identity = row.ItemArray.GetValue(0).ToString();
+                var groupName = row.ItemArray.GetValue(1).ToString();
+                var flags = row.ItemArray.GetValue(2).ToString();
+                int.TryParse(row.ItemArray.GetValue(3).ToString(), out var immunity);
+
+                if (groups.TryGetValue(groupName, out var group))
+                {
+                    flags += group.Flags;
+                    immunity = Math.Max(immunity, group.Immunity);
+                }
+
+                AdminManager.AddAdmin(identity, immunity, flags);
+            }
+        }
+
+        /// <summary>
+        /// Called when the player bans check query has completed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
+        private void OnCheckPlayerBansQueryCompleted(object sender, QueryCompletedEventArgs e)
+        {
+            if (e.Results.Rows.Count > 0)
+            {
+                var prefix = this.databasePrefix.AsString;
+                var bid = e.Results.Rows[0].ItemArray.GetValue(0).ToString();
+                var ip = e.Results.Rows[0].ItemArray.GetValue(1).ToString();
+
+                if (string.IsNullOrEmpty(e.Results.Rows[0].ItemArray.GetValue(1).ToString()))
+                {
+                    this.database.TFastQuery($"UPDATE {prefix}_bans SET `ip` = '{ip}' WHERE `bid` = '{bid}'");
+                }
+
+                var client = (ClientInfo)e.Data;
+                var auth = GetAuth(client.playerId).Substring(8);
+                var name = this.database.Escape(client.playerName);
+                this.database.TFastQuery($"INSERT INTO {prefix}_banlog (sid, time, name, bid) VALUES ({this.serverId.AsInt}, UNIX_TIMESTAMP(), '{name}', (SELECT bid FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR(type = 1 AND ip = '{client.ip}')) AND RemoveType IS NULL LIMIT 0, 1))");
+
+                SdtdConsole.Instance.ExecuteSync($"kick {client.playerId} \"You have been banned by this server, check {this.website.AsString} for more info\"", null);
+            }
+        }
+
+        /// <summary>
+        /// Called when the unban check query has completed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
+        private void OnUnbanQueryCompleted(object sender, QueryCompletedEventArgs e)
+        {
+            if (e.Results.Rows.Count > 0)
+            {
+                var args = (AdminCommandEventArgs)e.Data;
+                var prefix = this.databasePrefix.AsString;
+                var bid = e.Results.Rows[0].ItemArray.GetValue(0).ToString();
+                var reason = (args.Arguments.Count > 1) ? this.database.Escape(string.Join(" ", args.Arguments.GetRange(1, args.Arguments.Count - 1).ToArray())) : string.Empty;
+                var adminAuth = (args.SenderInfo.RemoteClientInfo != null) ? GetAuth(args.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
+                var adminIp = (args.SenderInfo.RemoteClientInfo != null) ? args.SenderInfo.RemoteClientInfo.ip : string.Empty;
+                this.database.TFastQuery($"UPDATE {prefix}_bans SET RemovedBy = (SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), RemoveType = 'U', RemovedOn = UNIX_TIMESTAMP(), ureason = '{reason}' WHERE bid = {bid}");
+
+                ChatHelper.ReplyToCommand(args.SenderInfo, $"{args.Arguments[0]} has been unbanned.");
+            }
         }
     }
 }
