@@ -22,6 +22,11 @@ namespace SevenMod.Plugin.SourceBans
     public sealed class SourceBans : PluginAbstract
     {
         /// <summary>
+        /// The memory cache.
+        /// </summary>
+        private readonly SBCache cache = new SBCache();
+
+        /// <summary>
         /// The value of the SBWebsite <see cref="ConVar"/>.
         /// </summary>
         private ConVarValue website;
@@ -129,12 +134,33 @@ namespace SevenMod.Plugin.SourceBans
                 return;
             }
 
+            if (this.cache.GetAdmins(out var list, out var expired) && !expired)
+            {
+                foreach (var admin in list)
+                {
+                    AdminManager.AddAdmin(admin.Identity, admin.Immunity, admin.Flags);
+                }
+
+                return;
+            }
+
             this.database.TQuery($"SELECT name, flags, immunity FROM {this.databasePrefix.AsString}_srvgroups ORDER BY id").QueryCompleted += this.OnGroupsQueryCompleted;
         }
 
         /// <inheritdoc/>
         public override bool OnPlayerLogin(ClientInfo client, StringBuilder rejectReason)
         {
+            if (this.cache.GetPlayerStatus(client.playerId, out var banned, out var expired) && !expired)
+            {
+                if (banned)
+                {
+                    rejectReason.AppendLine($"You have been banned from this server, check {this.website.AsString} for more info");
+                    return false;
+                }
+
+                return true;
+            }
+
             var prefix = this.databasePrefix.AsString;
             var auth = GetAuth(client.playerId).Substring(8);
             var ip = this.database.Escape(client.ip);
@@ -401,6 +427,7 @@ namespace SevenMod.Plugin.SourceBans
         private void OnAdminsQueryCompleted(object sender, QueryCompletedEventArgs e)
         {
             var groups = (Dictionary<string, GroupInfo>)e.Data;
+            var admins = new List<SBCache.Admin>();
             foreach (DataRow row in e.Results.Rows)
             {
                 var identity = row.ItemArray.GetValue(0).ToString();
@@ -414,8 +441,11 @@ namespace SevenMod.Plugin.SourceBans
                     immunity = Math.Max(immunity, group.Immunity);
                 }
 
+                admins.Add(new SBCache.Admin(identity, flags, immunity));
                 AdminManager.AddAdmin(identity, immunity, flags);
             }
+
+            this.cache.SetAdminList(admins, 60 * 5);
         }
 
         /// <summary>
@@ -425,6 +455,7 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
         private void OnCheckPlayerBansQueryCompleted(object sender, QueryCompletedEventArgs e)
         {
+            var client = (ClientInfo)e.Data;
             if (e.Results.Rows.Count > 0)
             {
                 var prefix = this.databasePrefix.AsString;
@@ -436,13 +467,14 @@ namespace SevenMod.Plugin.SourceBans
                     this.database.TFastQuery($"UPDATE {prefix}_bans SET `ip` = '{ip}' WHERE `bid` = '{bid}'");
                 }
 
-                var client = (ClientInfo)e.Data;
                 var auth = GetAuth(client.playerId).Substring(8);
                 var name = this.database.Escape(client.playerName);
                 this.database.TFastQuery($"INSERT INTO {prefix}_banlog (sid, time, name, bid) VALUES ({this.serverId.AsInt}, UNIX_TIMESTAMP(), '{name}', (SELECT bid FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR(type = 1 AND ip = '{client.ip}')) AND RemoveType IS NULL LIMIT 0, 1))");
 
-                SdtdConsole.Instance.ExecuteSync($"kick {client.playerId} \"You have been banned by this server, check {this.website.AsString} for more info\"", null);
+                SdtdConsole.Instance.ExecuteSync($"kick {client.playerId} \"You have been banned from this server, check {this.website.AsString} for more info\"", null);
             }
+
+            this.cache.SetPlayerStatus(client.playerId, e.Results.Rows.Count > 0, 60 * 5);
         }
 
         /// <summary>

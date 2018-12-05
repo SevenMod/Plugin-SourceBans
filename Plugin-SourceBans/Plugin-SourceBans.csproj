@@ -52,6 +52,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="SBCache.cs" />
     <Compile Include="SourceBans.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
