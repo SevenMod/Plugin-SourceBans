@@ -437,8 +437,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (!e.Success)
             {
-                this.adminRetryTimer = new Timer();
-                this.adminRetryTimer.Interval = this.retryTime.AsFloat;
+                this.adminRetryTimer = new Timer(this.retryTime.AsFloat);
                 this.adminRetryTimer.Elapsed += this.OnAdminRetryTimerElapsed;
                 this.adminRetryTimer.Enabled = true;
                 return;
@@ -473,8 +472,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (!e.Success)
             {
-                this.adminRetryTimer = new Timer();
-                this.adminRetryTimer.Interval = this.retryTime.AsFloat;
+                this.adminRetryTimer = new Timer(this.retryTime.AsFloat);
                 this.adminRetryTimer.Elapsed += this.OnAdminRetryTimerElapsed;
                 this.adminRetryTimer.Enabled = true;
                 return;
@@ -527,8 +525,7 @@ namespace SevenMod.Plugin.SourceBans
                 this.recheckPlayers.Add(client.playerId);
                 if (this.banRecheckTimer == null)
                 {
-                    this.banRecheckTimer = new Timer();
-                    this.banRecheckTimer.Interval = this.retryTime.AsFloat;
+                    this.banRecheckTimer = new Timer(this.retryTime.AsFloat);
                     this.banRecheckTimer.Elapsed += this.OnBanRecheckTimerElapsed;
                     this.banRecheckTimer.Enabled = true;
                 }
