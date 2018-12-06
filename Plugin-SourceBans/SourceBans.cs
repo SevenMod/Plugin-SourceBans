@@ -9,6 +9,7 @@ namespace SevenMod.Plugin.SourceBans
     using System.Collections.Generic;
     using System.Data;
     using System.Text;
+    using System.Timers;
     using SevenMod.Admin;
     using SevenMod.Chat;
     using SevenMod.Console;
@@ -25,6 +26,21 @@ namespace SevenMod.Plugin.SourceBans
         /// The memory cache.
         /// </summary>
         private readonly SBCache cache = new SBCache();
+
+        /// <summary>
+        /// The list of players to be rechecked for bans.
+        /// </summary>
+        private readonly List<string> recheckPlayers = new List<string>();
+
+        /// <summary>
+        /// The timer to retry loading the admin users.
+        /// </summary>
+        private Timer adminRetryTimer;
+
+        /// <summary>
+        /// The timer to retry checking for bans.
+        /// </summary>
+        private Timer banRecheckTimer;
 
         /// <summary>
         /// The value of the SBWebsite <see cref="ConVar"/>.
@@ -129,7 +145,7 @@ namespace SevenMod.Plugin.SourceBans
         /// <inheritdoc/>
         public override void OnReloadAdmins()
         {
-            if (!this.enableAdmins.AsBool)
+            if (!this.enableAdmins.AsBool || this.adminRetryTimer != null)
             {
                 return;
             }
@@ -144,7 +160,7 @@ namespace SevenMod.Plugin.SourceBans
                 return;
             }
 
-            this.database.TQuery($"SELECT name, flags, immunity FROM {this.databasePrefix.AsString}_srvgroups ORDER BY id").QueryCompleted += this.OnGroupsQueryCompleted;
+            this.LoadAdmins();
         }
 
         /// <inheritdoc/>
@@ -161,10 +177,10 @@ namespace SevenMod.Plugin.SourceBans
                 return true;
             }
 
-            var prefix = this.databasePrefix.AsString;
-            var auth = GetAuth(client.playerId).Substring(8);
-            var ip = this.database.Escape(client.ip);
-            this.database.TQuery($"SELECT bid, ip FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR (type = 1 AND ip = '{ip}')) AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL", client).QueryCompleted += this.OnCheckPlayerBansQueryCompleted;
+            if (!this.recheckPlayers.Contains(client.playerId))
+            {
+                this.CheckBans(client);
+            }
 
             return base.OnPlayerLogin(client, rejectReason);
         }
@@ -182,6 +198,26 @@ namespace SevenMod.Plugin.SourceBans
             var p2 = (id - p1) / 2;
 
             return $"STEAM_0:{p1}:{p2}";
+        }
+
+        /// <summary>
+        /// Loads the admin users from the database.
+        /// </summary>
+        private void LoadAdmins()
+        {
+            this.database.TQuery($"SELECT name, flags, immunity FROM {this.databasePrefix.AsString}_srvgroups ORDER BY id").QueryCompleted += this.OnGroupsQueryCompleted;
+        }
+
+        /// <summary>
+        /// Checks a player for bans in the database.
+        /// </summary>
+        /// <param name="client">The <see cref="ClientInfo"/> object representing the client to check.</param>
+        private void CheckBans(ClientInfo client)
+        {
+            var prefix = this.databasePrefix.AsString;
+            var auth = GetAuth(client.playerId).Substring(8);
+            var ip = this.database.Escape(client.ip);
+            this.database.TQuery($"SELECT bid, ip FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR (type = 1 AND ip = '{ip}')) AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL", client).QueryCompleted += this.OnCheckPlayerBansQueryCompleted;
         }
 
         /// <summary>
@@ -399,6 +435,15 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
         private void OnGroupsQueryCompleted(object sender, QueryCompletedEventArgs e)
         {
+            if (!e.Success)
+            {
+                this.adminRetryTimer = new Timer();
+                this.adminRetryTimer.Interval = this.retryTime.AsFloat;
+                this.adminRetryTimer.Elapsed += this.OnAdminRetryTimerElapsed;
+                this.adminRetryTimer.Enabled = true;
+                return;
+            }
+
             var groups = new Dictionary<string, GroupInfo>();
             foreach (DataRow row in e.Results.Rows)
             {
@@ -426,6 +471,15 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
         private void OnAdminsQueryCompleted(object sender, QueryCompletedEventArgs e)
         {
+            if (!e.Success)
+            {
+                this.adminRetryTimer = new Timer();
+                this.adminRetryTimer.Interval = this.retryTime.AsFloat;
+                this.adminRetryTimer.Elapsed += this.OnAdminRetryTimerElapsed;
+                this.adminRetryTimer.Enabled = true;
+                return;
+            }
+
             var groups = (Dictionary<string, GroupInfo>)e.Data;
             var admins = new List<SBCache.Admin>();
             foreach (DataRow row in e.Results.Rows)
@@ -449,6 +503,18 @@ namespace SevenMod.Plugin.SourceBans
         }
 
         /// <summary>
+        /// Called when the admin user list retry timer elapses.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">An <see cref="ElapsedEventArgs"/> object containing the event data.</param>
+        private void OnAdminRetryTimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            this.adminRetryTimer.Dispose();
+            this.adminRetryTimer = null;
+            this.LoadAdmins();
+        }
+
+        /// <summary>
         /// Called when the player bans check query has completed.
         /// </summary>
         /// <param name="sender">The source of the event.</param>
@@ -456,6 +522,20 @@ namespace SevenMod.Plugin.SourceBans
         private void OnCheckPlayerBansQueryCompleted(object sender, QueryCompletedEventArgs e)
         {
             var client = (ClientInfo)e.Data;
+            if (!e.Success)
+            {
+                this.recheckPlayers.Add(client.playerId);
+                if (this.banRecheckTimer == null)
+                {
+                    this.banRecheckTimer = new Timer();
+                    this.banRecheckTimer.Interval = this.retryTime.AsFloat;
+                    this.banRecheckTimer.Elapsed += this.OnBanRecheckTimerElapsed;
+                    this.banRecheckTimer.Enabled = true;
+                }
+
+                return;
+            }
+
             if (e.Results.Rows.Count > 0)
             {
                 var prefix = this.databasePrefix.AsString;
@@ -475,6 +555,28 @@ namespace SevenMod.Plugin.SourceBans
             }
 
             this.cache.SetPlayerStatus(client.playerId, e.Results.Rows.Count > 0, 60 * 5);
+        }
+
+        /// <summary>
+        /// Called when the player ban retry timer elapses.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">An <see cref="ElapsedEventArgs"/> object containing the event data.</param>
+        private void OnBanRecheckTimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            this.banRecheckTimer.Dispose();
+            this.banRecheckTimer = null;
+
+            var list = this.recheckPlayers.ToArray();
+            this.recheckPlayers.Clear();
+            foreach (var playerId in list)
+            {
+                var client = ConnectionManager.Instance.Clients.ForPlayerId(playerId);
+                if (client != null)
+                {
+                    this.CheckBans(client);
+                }
+            }
         }
 
         /// <summary>
