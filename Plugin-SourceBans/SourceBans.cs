@@ -23,6 +23,11 @@ namespace SevenMod.Plugin.SourceBans
     public sealed class SourceBans : PluginAbstract
     {
         /// <summary>
+        /// A <see cref="DateTime"/> object representing the Unix epoch.
+        /// </summary>
+        private static readonly DateTime Epoch = new DateTime(1970, 1, 1);
+
+        /// <summary>
         /// The memory cache.
         /// </summary>
         private readonly SBCache cache = new SBCache();
@@ -33,6 +38,16 @@ namespace SevenMod.Plugin.SourceBans
         private readonly List<string> recheckPlayers = new List<string>();
 
         /// <summary>
+        /// Represents the database connection.
+        /// </summary>
+        private Database database;
+
+        /// <summary>
+        /// Represents the backup queue database connection.
+        /// </summary>
+        private SQLiteDatabase backupDatabase;
+
+        /// <summary>
         /// The timer to retry loading the admin users.
         /// </summary>
         private Timer adminRetryTimer;
@@ -41,6 +56,11 @@ namespace SevenMod.Plugin.SourceBans
         /// The timer to retry checking for bans.
         /// </summary>
         private Timer banRecheckTimer;
+
+        /// <summary>
+        /// The timer to run the failed ban queue.
+        /// </summary>
+        private Timer queueTimer;
 
         /// <summary>
         /// The value of the SBWebsite <see cref="ConVar"/>.
@@ -92,11 +112,6 @@ namespace SevenMod.Plugin.SourceBans
         /// </summary>
         private ConVarValue serverId;
 
-        /// <summary>
-        /// Represents the database connection.
-        /// </summary>
-        private Database database;
-
         /// <inheritdoc/>
         public override PluginInfo Info => new PluginInfo
         {
@@ -129,6 +144,9 @@ namespace SevenMod.Plugin.SourceBans
         {
             this.database = Database.Connect("sourcebans");
 
+            this.backupDatabase = Database.OpenSQLiteDatabase("sourcebans-queue");
+            this.backupDatabase.TFastQuery("CREATE TABLE IF NOT EXISTS queue (auth TEXT PRIMARY KEY ON CONFLICT REPLACE, ip TEXT, name TEXT, time INTEGER, start_time INTEGER, reason TEXT, admin_auth TEXT, admin_ip TEXT);");
+
             PluginManager.Unload("BaseBans");
 
             this.RegAdminCmd("rehash", AdminFlags.RCON, "Reload SQL admins").Executed += this.OnRehashCommandExecuted;
@@ -137,9 +155,13 @@ namespace SevenMod.Plugin.SourceBans
             this.RegAdminCmd("addban", AdminFlags.RCON, "sm addban <time> <steamid> [reason]").Executed += this.OnAddbanCommandExecuted;
             this.RegAdminCmd("unban", AdminFlags.Unban, "sm unban <steamid|ip> [reason]").Executed += this.OnUnbanCommandExecuted;
 
+            this.retryTime.ConVar.ValueChanged += this.OnRetryTimeChanged;
+            this.processQueueTime.ConVar.ValueChanged += this.OnProcessQueueTimeChanged;
             this.enableAdmins.ConVar.ValueChanged += this.OnEnableAdminsChanged;
             this.requireSiteLogin.ConVar.ValueChanged += this.OnRequireSiteLoginChanged;
             this.serverId.ConVar.ValueChanged += this.OnServerIdChanged;
+
+            this.ProcessBanQueue();
         }
 
         /// <inheritdoc/>
@@ -201,6 +223,15 @@ namespace SevenMod.Plugin.SourceBans
         }
 
         /// <summary>
+        /// Gets the current time as a Unix timestamp.
+        /// </summary>
+        /// <returns>The number of seconds since the Unix epoch.</returns>
+        private static long GetTime()
+        {
+            return DateTime.Now.Subtract(Epoch).Seconds;
+        }
+
+        /// <summary>
         /// Loads the admin users from the database.
         /// </summary>
         private void LoadAdmins()
@@ -218,6 +249,37 @@ namespace SevenMod.Plugin.SourceBans
             var auth = GetAuth(client.playerId).Substring(8);
             var ip = this.database.Escape(client.ip);
             this.database.TQuery($"SELECT bid, ip FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR (type = 1 AND ip = '{ip}')) AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL", client).QueryCompleted += this.OnCheckPlayerBansQueryCompleted;
+        }
+
+        /// <summary>
+        /// Called when the value of the SBRetryTime <see cref="ConVar"/> is changed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="ConVarChangedEventArgs"/> object containing the event data.</param>
+        private void OnRetryTimeChanged(object sender, ConVarChangedEventArgs e)
+        {
+            if (this.adminRetryTimer != null)
+            {
+                this.adminRetryTimer.Interval = this.retryTime.AsFloat;
+            }
+
+            if (this.banRecheckTimer != null)
+            {
+                this.banRecheckTimer.Interval = this.retryTime.AsFloat;
+            }
+        }
+
+        /// <summary>
+        /// Called when the value of the SBProcessQueueTime <see cref="ConVar"/> is changed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="ConVarChangedEventArgs"/> object containing the event data.</param>
+        private void OnProcessQueueTimeChanged(object sender, ConVarChangedEventArgs e)
+        {
+            if (this.queueTimer != null)
+            {
+                this.queueTimer.Interval = this.processQueueTime.AsFloat * 60;
+            }
         }
 
         /// <summary>
@@ -290,14 +352,13 @@ namespace SevenMod.Plugin.SourceBans
 
             if (SMConsoleHelper.ParseSingleTargetString(e.SenderInfo, e.Arguments[0], out var target))
             {
-                var prefix = this.databasePrefix.AsString;
                 var auth = GetAuth(target.playerId);
                 var name = this.database.Escape(target.playerName);
                 duration *= 60;
                 var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
                 var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
                 var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
-                this.database.TFastQuery($"INSERT INTO {prefix}_bans (ip, authid, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES ('{target.ip}', '{auth}', '{name}', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
+                this.InsertBan(auth, target.ip, name, GetTime(), duration, reason, adminAuth, adminIp);
 
                 SdtdConsole.Instance.ExecuteSync($"kick {target.playerId} \"You have been banned from this server, check {this.website.AsString} for more info\"", null);
 
@@ -332,13 +393,12 @@ namespace SevenMod.Plugin.SourceBans
 
             if (SMConsoleHelper.ParseSingleTargetString(e.SenderInfo, e.Arguments[0], out var target))
             {
-                var prefix = this.databasePrefix.AsString;
                 var name = this.database.Escape(target.playerName);
                 duration *= 60;
                 var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
                 var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
                 var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
-                this.database.TFastQuery($"INSERT INTO {prefix}_bans (type, ip, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES (1, '{target.ip}', '{name}', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
+                this.InsertBan(string.Empty, target.ip, name, GetTime(), duration, reason, adminAuth, adminIp);
 
                 SdtdConsole.Instance.ExecuteSync($"kick {target.playerId} \"You have been banned by this server, check {this.website.AsString} for more info\"", null);
 
@@ -378,13 +438,12 @@ namespace SevenMod.Plugin.SourceBans
 
             if (SteamUtils.NormalizeSteamId(e.Arguments[1], out var playerId))
             {
-                var prefix = this.databasePrefix.AsString;
                 var auth = GetAuth(playerId);
                 duration *= 60;
                 var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
                 var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
                 var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
-                this.database.TFastQuery($"INSERT INTO {prefix}_bans (authid, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES ('{auth}', '', UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + {duration}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')");
+                this.InsertBan(auth, string.Empty, string.Empty, GetTime(), duration, reason, adminAuth, adminIp);
 
                 SdtdConsole.Instance.ExecuteSync($"kick {playerId} \"You are banned from this server, check {this.website.AsString} for more info\"", null);
 
@@ -425,6 +484,55 @@ namespace SevenMod.Plugin.SourceBans
             {
                 var ip = this.database.Escape(e.Arguments[0]);
                 this.database.TQuery($"SELECT bid FROM {prefix}_bans WHERE (type = 1 AND ip = '{ip}') AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL", e).QueryCompleted += this.OnUnbanQueryCompleted;
+            }
+        }
+
+        /// <summary>
+        /// Inserts a new ban into the database.
+        /// </summary>
+        /// <param name="auth">The auth ID of the player.</param>
+        /// <param name="ip">The IP address of the player.</param>
+        /// <param name="name">The escaped name of the player.</param>
+        /// <param name="startTime">The Unix timestamp of the time the ban was initiated.</param>
+        /// <param name="duration">The duration of the ban in seconds.</param>
+        /// <param name="reason">The escaped reason for the ban.</param>
+        /// <param name="adminAuth">The auth ID of the admin invoking the ban.</param>
+        /// <param name="adminIp">The IP address of the admin invoking the ban.</param>
+        private void InsertBan(string auth, string ip, string name, long startTime, uint duration, string reason, string adminAuth, string adminIp)
+        {
+            var prefix = this.databasePrefix.AsString;
+            var type = string.IsNullOrEmpty(auth) ? 1 : 0;
+            var data = new Dictionary<string, object>
+            {
+                { "auth", auth },
+                { "ip", ip },
+                { "name", name },
+                { "startTime", startTime },
+                { "duration", duration },
+                { "reason", reason },
+                { "adminAuth", adminAuth },
+                { "adminIp", adminIp },
+            };
+            var ends = startTime + duration;
+            this.database.TFastQuery($"INSERT INTO {prefix}_bans (type, authid, ip, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES ({type}, '{auth}', '{ip}', '{name}', {startTime}, {ends}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')", data).QueryCompleted += this.OnInsertBanQueryCompleted;
+
+            if (ends <= GetTime())
+            {
+                this.cache.SetPlayerStatus(auth, true, duration);
+            }
+        }
+
+        /// <summary>
+        /// Called when the insert ban query has completed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
+        private void OnInsertBanQueryCompleted(object sender, QueryCompletedEventArgs e)
+        {
+            if (!e.Success)
+            {
+                var data = (Dictionary<string, object>)e.Data;
+                this.QueueFailedBan(data["auth"].ToString(), data["ip"].ToString(), data["name"].ToString(), (long)data["startTime"], (uint)data["duration"], data["reason"].ToString(), data["adminAuth"].ToString(), data["adminIp"].ToString());
             }
         }
 
@@ -594,6 +702,104 @@ namespace SevenMod.Plugin.SourceBans
                 this.database.TFastQuery($"UPDATE {prefix}_bans SET RemovedBy = (SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), RemoveType = 'U', RemovedOn = UNIX_TIMESTAMP(), ureason = '{reason}' WHERE bid = {bid}");
 
                 ChatHelper.ReplyToCommand(args.SenderInfo, $"{args.Arguments[0]} has been unbanned.");
+            }
+        }
+
+        /// <summary>
+        /// Stores a failed ban in the local database to be retried later.
+        /// </summary>
+        /// <param name="auth">The auth ID of the player.</param>
+        /// <param name="ip">The IP address of the player.</param>
+        /// <param name="name">The escaped name of the player.</param>
+        /// <param name="startTime">The Unix timestamp of the time the ban was initiated.</param>
+        /// <param name="duration">The duration of the ban in seconds.</param>
+        /// <param name="reason">The escaped reason for the ban.</param>
+        /// <param name="adminAuth">The auth ID of the admin invoking the ban.</param>
+        /// <param name="adminIp">The IP address of the admin invoking the ban.</param>
+        private void QueueFailedBan(string auth, string ip, string name, long startTime, uint duration, string reason, string adminAuth, string adminIp)
+        {
+            auth = this.backupDatabase.Escape(auth);
+            reason = this.backupDatabase.Escape(reason);
+            name = this.backupDatabase.Escape(name);
+            ip = this.backupDatabase.Escape(ip);
+            adminAuth = this.backupDatabase.Escape(adminAuth);
+            adminIp = this.backupDatabase.Escape(adminIp);
+            this.backupDatabase.TFastQuery($"INSERT INTO queue (auth, ip, name, duration, start_time, reason, admin_auth, admin_ip) VALUES ('{auth}', '{ip}', '{name}', {duration}, {startTime}, '{reason}', '{adminAuth}', '{adminIp}');").QueryCompleted += this.OnQueueBanQueryCompleted;
+
+            this.StartQueueTimer();
+        }
+
+        /// <summary>
+        /// Called when the queue failed ban query has completed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
+        private void OnQueueBanQueryCompleted(object sender, QueryCompletedEventArgs e)
+        {
+            if (!e.Success)
+            {
+                this.LogError("Failed to record ban in the local backup database.");
+            }
+        }
+
+        /// <summary>
+        /// Starts the timer to run the failed ban queue.
+        /// </summary>
+        private void StartQueueTimer()
+        {
+            if (this.queueTimer == null)
+            {
+                this.queueTimer = new Timer(this.processQueueTime.AsFloat * 60);
+                this.queueTimer.Elapsed += this.OnQueueTimerElapsed;
+                this.queueTimer.Enabled = true;
+            }
+        }
+
+        /// <summary>
+        /// Called when the failed ban queue timer elapses.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">An <see cref="ElapsedEventArgs"/> object containing the event data.</param>
+        private void OnQueueTimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            this.ProcessBanQueue();
+        }
+
+        /// <summary>
+        /// Starts processing the failed ban queue.
+        /// </summary>
+        private void ProcessBanQueue()
+        {
+            this.queueTimer.Dispose();
+            this.queueTimer = null;
+            this.backupDatabase.TQuery("SELECT auth, ip, name, duration, start_time, reason, admin_auth, admin_ip FROM queue;").QueryCompleted += this.OnQueueQueryCompleted;
+        }
+
+        /// <summary>
+        /// Called when the failed ban queue query has completed.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
+        private void OnQueueQueryCompleted(object sender, QueryCompletedEventArgs e)
+        {
+            if (!e.Success)
+            {
+                this.StartQueueTimer();
+                return;
+            }
+
+            foreach (DataRow row in e.Results.Rows)
+            {
+                var auth = row.ItemArray.GetValue(0).ToString();
+                var ip = row.ItemArray.GetValue(1).ToString();
+                var name = this.database.Escape(row.ItemArray.GetValue(2).ToString());
+                var duration = uint.Parse(row.ItemArray.GetValue(3).ToString());
+                var startTime = long.Parse(row.ItemArray.GetValue(4).ToString());
+                var reason = this.database.Escape(row.ItemArray.GetValue(5).ToString());
+                var adminAuth = row.ItemArray.GetValue(6).ToString();
+                var adminIp = row.ItemArray.GetValue(7).ToString();
+
+                this.InsertBan(auth, ip, name, startTime, duration, reason, adminAuth, adminIp);
             }
         }
     }

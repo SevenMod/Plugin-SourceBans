@@ -53,7 +53,7 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="playerId">The identifier of the player.</param>
         /// <param name="banned">A value indicating whether the player is banned.</param>
         /// <param name="ttl">The time in seconds before the cache entry is considered expired.</param>
-        public void SetPlayerStatus(string playerId, bool banned, int ttl)
+        public void SetPlayerStatus(string playerId, bool banned, uint ttl)
         {
             this.playerStatus[playerId] = new Entry<bool>
             {
@@ -87,7 +87,7 @@ namespace SevenMod.Plugin.SourceBans
         /// </summary>
         /// <param name="list">The list of admin users.</param>
         /// <param name="ttl">The time in seconds before the cache entry is considered expired.</param>
-        public void SetAdminList(List<Admin> list, int ttl)
+        public void SetAdminList(List<Admin> list, uint ttl)
         {
             this.admins.Expires = DateTime.Now.AddSeconds(ttl);
             this.admins.Value = list;
