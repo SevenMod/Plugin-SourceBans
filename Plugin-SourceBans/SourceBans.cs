@@ -145,7 +145,7 @@ namespace SevenMod.Plugin.SourceBans
             this.database = Database.Connect("sourcebans");
 
             this.backupDatabase = Database.OpenSQLiteDatabase("sourcebans-queue");
-            this.backupDatabase.TFastQuery("CREATE TABLE IF NOT EXISTS queue (auth TEXT PRIMARY KEY ON CONFLICT REPLACE, ip TEXT, name TEXT, time INTEGER, start_time INTEGER, reason TEXT, admin_auth TEXT, admin_ip TEXT);");
+            this.backupDatabase.TFastQuery("CREATE TABLE IF NOT EXISTS queue (auth TEXT PRIMARY KEY ON CONFLICT REPLACE, ip TEXT, name TEXT, duration INTEGER, start_time INTEGER, reason TEXT, admin_auth TEXT, admin_ip TEXT);");
 
             PluginManager.Unload("BaseBans");
 
