@@ -228,7 +228,7 @@ namespace SevenMod.Plugin.SourceBans
         /// <returns>The number of seconds since the Unix epoch.</returns>
         private static long GetTime()
         {
-            return DateTime.Now.Subtract(Epoch).Seconds;
+            return (long)DateTime.UtcNow.Subtract(Epoch).TotalSeconds;
         }
 
         /// <summary>
