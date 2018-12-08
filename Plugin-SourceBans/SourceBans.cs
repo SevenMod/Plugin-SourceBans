@@ -529,10 +529,14 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
         private void OnInsertBanQueryCompleted(object sender, QueryCompletedEventArgs e)
         {
+            var data = (Dictionary<string, object>)e.Data;
             if (!e.Success)
             {
-                var data = (Dictionary<string, object>)e.Data;
                 this.QueueFailedBan(data["auth"].ToString(), data["ip"].ToString(), data["name"].ToString(), (long)data["startTime"], (uint)data["duration"], data["reason"].ToString(), data["adminAuth"].ToString(), data["adminIp"].ToString());
+            }
+            else
+            {
+                this.backupDatabase.TFastQuery($"DELETE FROM queue WHERE auth = '{data["auth"].ToString()}';");
             }
         }
 
