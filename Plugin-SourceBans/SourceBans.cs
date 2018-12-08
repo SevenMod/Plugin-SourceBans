@@ -18,7 +18,7 @@ namespace SevenMod.Plugin.SourceBans
     using SevenMod.Database;
 
     /// <summary>
-    /// Plugin that periodically shows messages in chat.
+    /// Plugin that integrates SevenMod with the SourceBans backend.
     /// </summary>
     public sealed class SourceBans : PluginAbstract
     {
