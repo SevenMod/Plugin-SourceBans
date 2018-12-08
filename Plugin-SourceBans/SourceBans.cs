@@ -260,12 +260,12 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (this.adminRetryTimer != null)
             {
-                this.adminRetryTimer.Interval = this.retryTime.AsFloat;
+                this.adminRetryTimer.Interval = this.retryTime.AsFloat * 1000;
             }
 
             if (this.banRecheckTimer != null)
             {
-                this.banRecheckTimer.Interval = this.retryTime.AsFloat;
+                this.banRecheckTimer.Interval = this.retryTime.AsFloat * 1000;
             }
         }
 
@@ -278,7 +278,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (this.queueTimer != null)
             {
-                this.queueTimer.Interval = this.processQueueTime.AsFloat * 60;
+                this.queueTimer.Interval = this.processQueueTime.AsFloat * 60000;
             }
         }
 
@@ -549,7 +549,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (!e.Success)
             {
-                this.adminRetryTimer = new Timer(this.retryTime.AsFloat);
+                this.adminRetryTimer = new Timer(this.retryTime.AsFloat * 1000);
                 this.adminRetryTimer.Elapsed += this.OnAdminRetryTimerElapsed;
                 this.adminRetryTimer.Enabled = true;
                 return;
@@ -584,7 +584,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (!e.Success)
             {
-                this.adminRetryTimer = new Timer(this.retryTime.AsFloat);
+                this.adminRetryTimer = new Timer(this.retryTime.AsFloat * 1000);
                 this.adminRetryTimer.Elapsed += this.OnAdminRetryTimerElapsed;
                 this.adminRetryTimer.Enabled = true;
                 return;
@@ -637,7 +637,7 @@ namespace SevenMod.Plugin.SourceBans
                 this.recheckPlayers.Add(client.playerId);
                 if (this.banRecheckTimer == null)
                 {
-                    this.banRecheckTimer = new Timer(this.retryTime.AsFloat);
+                    this.banRecheckTimer = new Timer(this.retryTime.AsFloat * 1000);
                     this.banRecheckTimer.Elapsed += this.OnBanRecheckTimerElapsed;
                     this.banRecheckTimer.Enabled = true;
                 }
@@ -753,7 +753,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (this.queueTimer == null)
             {
-                this.queueTimer = new Timer(this.processQueueTime.AsFloat * 60);
+                this.queueTimer = new Timer(this.processQueueTime.AsFloat * 60000);
                 this.queueTimer.Elapsed += this.OnQueueTimerElapsed;
                 this.queueTimer.Enabled = true;
             }
