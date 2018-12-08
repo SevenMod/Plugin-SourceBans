@@ -762,6 +762,8 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="e">An <see cref="ElapsedEventArgs"/> object containing the event data.</param>
         private void OnQueueTimerElapsed(object sender, ElapsedEventArgs e)
         {
+            this.queueTimer.Dispose();
+            this.queueTimer = null;
             this.ProcessBanQueue();
         }
 
@@ -770,8 +772,6 @@ namespace SevenMod.Plugin.SourceBans
         /// </summary>
         private void ProcessBanQueue()
         {
-            this.queueTimer.Dispose();
-            this.queueTimer = null;
             this.backupDatabase.TQuery("SELECT auth, ip, name, duration, start_time, reason, admin_auth, admin_ip FROM queue;").QueryCompleted += this.OnQueueQueryCompleted;
         }
 
