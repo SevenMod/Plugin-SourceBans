@@ -19,7 +19,7 @@ namespace SevenMod.Plugin.SourceBans
     /// <summary>
     /// Plugin that integrates SevenMod with the SourceBans backend.
     /// </summary>
-    public sealed class SourceBans : PluginAbstract
+    public sealed class SourceBans : PluginAbstract, IDisposable
     {
         /// <summary>
         /// A <see cref="DateTime"/> object representing the Unix epoch.
@@ -204,6 +204,16 @@ namespace SevenMod.Plugin.SourceBans
             }
 
             return base.OnPlayerLogin(client, rejectReason);
+        }
+
+        /// <inheritdoc/>
+        public void Dispose()
+        {
+            ((IDisposable)this.database).Dispose();
+            ((IDisposable)this.backupDatabase).Dispose();
+            ((IDisposable)this.adminRetryTimer).Dispose();
+            ((IDisposable)this.banRecheckTimer).Dispose();
+            ((IDisposable)this.queueTimer).Dispose();
         }
 
         /// <summary>
