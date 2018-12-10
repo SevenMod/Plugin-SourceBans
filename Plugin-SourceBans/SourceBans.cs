@@ -185,9 +185,9 @@ namespace SevenMod.Plugin.SourceBans
         }
 
         /// <inheritdoc/>
-        public override bool OnPlayerLogin(ClientInfo client, StringBuilder rejectReason)
+        public override bool OnPlayerLogin(SMClient client, StringBuilder rejectReason)
         {
-            if (this.cache.GetPlayerStatus(client.playerId, out var banned, out var expired) && !expired)
+            if (this.cache.GetPlayerStatus(client.PlayerId, out var banned, out var expired) && !expired)
             {
                 if (banned)
                 {
@@ -198,7 +198,7 @@ namespace SevenMod.Plugin.SourceBans
                 return true;
             }
 
-            if (!this.recheckPlayers.Contains(client.playerId))
+            if (!this.recheckPlayers.Contains(client.PlayerId))
             {
                 this.CheckBans(client);
             }
@@ -251,12 +251,12 @@ namespace SevenMod.Plugin.SourceBans
         /// <summary>
         /// Checks a player for bans in the database.
         /// </summary>
-        /// <param name="client">The <see cref="ClientInfo"/> object representing the client to check.</param>
-        private void CheckBans(ClientInfo client)
+        /// <param name="client">The <see cref="SMClient"/> object representing the client to check.</param>
+        private void CheckBans(SMClient client)
         {
             var prefix = this.databasePrefix.AsString;
-            var auth = GetAuth(client.playerId).Substring(8);
-            var ip = this.database.Escape(client.ip);
+            var auth = GetAuth(client.PlayerId).Substring(8);
+            var ip = this.database.Escape(client.Ip);
             this.database.TQuery($"SELECT bid, ip FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR (type = 1 AND ip = '{ip}')) AND (length = '0' OR ends > UNIX_TIMESTAMP()) AND RemoveType IS NULL", client).QueryCompleted += this.OnCheckPlayerBansQueryCompleted;
         }
 
@@ -343,35 +343,35 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (e.Arguments.Count < 2)
             {
-                this.ReplyToCommand(e.SenderInfo, "Usage: sm ban <#userid|name> <time|0> [reason]");
+                this.ReplyToCommand(e.Client, "Usage: sm ban <#userid|name> <time|0> [reason]");
                 return;
             }
 
             if (!uint.TryParse(e.Arguments[1], out var duration))
             {
-                this.ReplyToCommand(e.SenderInfo, "Invaid ban duration");
+                this.ReplyToCommand(e.Client, "Invaid ban duration");
                 return;
             }
 
-            if (duration == 0 && !AdminManager.CheckAccess(e.SenderInfo.RemoteClientInfo, AdminFlags.Unban))
+            if (duration == 0 && !AdminManager.CheckAccess(e.Client, AdminFlags.Unban))
             {
-                this.ReplyToCommand(e.SenderInfo, "You do not have perm ban permission.");
+                this.ReplyToCommand(e.Client, "You do not have perm ban permission.");
                 return;
             }
 
-            if (this.ParseSingleTargetString(e.SenderInfo, e.Arguments[0], out var target))
+            if (this.ParseSingleTargetString(e.Client, e.Arguments[0], out var target))
             {
-                var auth = GetAuth(target.playerId);
-                var name = this.database.Escape(target.playerName);
+                var auth = GetAuth(target.PlayerId);
+                var name = this.database.Escape(target.PlayerName);
                 duration *= 60;
                 var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
-                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
-                var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
-                this.InsertBan(auth, target.ip, name, GetTime(), duration, reason, adminAuth, adminIp);
+                var adminAuth = (e.Client != null) ? GetAuth(e.Client.PlayerId) : "STEAM_ID_SERVER";
+                var adminIp = (e.Client != null) ? e.Client.Ip : string.Empty;
+                this.InsertBan(auth, target.Ip, name, GetTime(), duration, reason, adminAuth, adminIp);
 
-                this.ServerCommand($"kick {target.playerId} \"You have been banned from this server, check {this.website.AsString} for more info\"");
+                this.ServerCommand($"kick {target.PlayerId} \"You have been banned from this server, check {this.website.AsString} for more info\"");
 
-                this.ReplyToCommand(e.SenderInfo, $"{name} has been banned.");
+                this.ReplyToCommand(e.Client, $"{name} has been banned.");
             }
         }
 
@@ -384,34 +384,34 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (e.Arguments.Count < 2)
             {
-                this.ReplyToCommand(e.SenderInfo, "Usage: sm banip <ip|#userid|name> <time> [reason]");
+                this.ReplyToCommand(e.Client, "Usage: sm banip <ip|#userid|name> <time> [reason]");
                 return;
             }
 
             if (!uint.TryParse(e.Arguments[1], out var duration))
             {
-                this.ReplyToCommand(e.SenderInfo, "Invaid ban duration");
+                this.ReplyToCommand(e.Client, "Invaid ban duration");
                 return;
             }
 
-            if (duration == 0 && !AdminManager.CheckAccess(e.SenderInfo.RemoteClientInfo, AdminFlags.Unban))
+            if (duration == 0 && !AdminManager.CheckAccess(e.Client, AdminFlags.Unban))
             {
-                this.ReplyToCommand(e.SenderInfo, "You do not have perm ban permission.");
+                this.ReplyToCommand(e.Client, "You do not have perm ban permission.");
                 return;
             }
 
-            if (this.ParseSingleTargetString(e.SenderInfo, e.Arguments[0], out var target))
+            if (this.ParseSingleTargetString(e.Client, e.Arguments[0], out var target))
             {
-                var name = this.database.Escape(target.playerName);
+                var name = this.database.Escape(target.PlayerName);
                 duration *= 60;
                 var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
-                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
-                var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
-                this.InsertBan(string.Empty, target.ip, name, GetTime(), duration, reason, adminAuth, adminIp);
+                var adminAuth = (e.Client != null) ? GetAuth(e.Client.PlayerId) : "STEAM_ID_SERVER";
+                var adminIp = (e.Client != null) ? e.Client.Ip : string.Empty;
+                this.InsertBan(string.Empty, target.Ip, name, GetTime(), duration, reason, adminAuth, adminIp);
 
-                this.ServerCommand($"kick {target.playerId} \"You have been banned by this server, check {this.website.AsString} for more info\"");
+                this.ServerCommand($"kick {target.PlayerId} \"You have been banned by this server, check {this.website.AsString} for more info\"");
 
-                this.ReplyToCommand(e.SenderInfo, $"{name} has been banned.");
+                this.ReplyToCommand(e.Client, $"{name} has been banned.");
             }
         }
 
@@ -424,23 +424,23 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (!this.addban.AsBool)
             {
-                this.ReplyToCommand(e.SenderInfo, "The addban command is disabled.");
+                this.ReplyToCommand(e.Client, "The addban command is disabled.");
                 return;
             }
 
             if (e.Arguments.Count < 2)
             {
-                this.ReplyToCommand(e.SenderInfo, "Usage: sm addban <time> <steamid> [reason]");
+                this.ReplyToCommand(e.Client, "Usage: sm addban <time> <steamid> [reason]");
                 return;
             }
 
             if (!uint.TryParse(e.Arguments[0], out var duration))
             {
-                this.ReplyToCommand(e.SenderInfo, "Invaid ban duration");
+                this.ReplyToCommand(e.Client, "Invaid ban duration");
                 return;
             }
 
-            if (duration == 0 && !AdminManager.CheckAccess(e.SenderInfo.RemoteClientInfo, AdminFlags.Unban))
+            if (duration == 0 && !AdminManager.CheckAccess(e.Client, AdminFlags.Unban))
             {
                 return;
             }
@@ -450,17 +450,17 @@ namespace SevenMod.Plugin.SourceBans
                 var auth = GetAuth(playerId);
                 duration *= 60;
                 var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
-                var adminAuth = (e.SenderInfo.RemoteClientInfo != null) ? GetAuth(e.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
-                var adminIp = (e.SenderInfo.RemoteClientInfo != null) ? e.SenderInfo.RemoteClientInfo.ip : string.Empty;
+                var adminAuth = (e.Client != null) ? GetAuth(e.Client.PlayerId) : "STEAM_ID_SERVER";
+                var adminIp = (e.Client != null) ? e.Client.Ip : string.Empty;
                 this.InsertBan(auth, string.Empty, string.Empty, GetTime(), duration, reason, adminAuth, adminIp);
 
                 this.ServerCommand($"kick {playerId} \"You are banned from this server, check {this.website.AsString} for more info\"");
 
-                this.ReplyToCommand(e.SenderInfo, $"{e.Arguments[1]} has been banned.");
+                this.ReplyToCommand(e.Client, $"{e.Arguments[1]} has been banned.");
             }
             else
             {
-                this.ReplyToCommand(e.SenderInfo, $"{e.Arguments[1]} is not a valid SteamID.");
+                this.ReplyToCommand(e.Client, $"{e.Arguments[1]} is not a valid SteamID.");
             }
         }
 
@@ -473,13 +473,13 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (!this.unban.AsBool)
             {
-                this.ReplyToCommand(e.SenderInfo, $"The unban command is disabled. You must use the Web interface at {this.website.AsString}.");
+                this.ReplyToCommand(e.Client, $"The unban command is disabled. You must use the Web interface at {this.website.AsString}.");
                 return;
             }
 
             if (e.Arguments.Count < 1)
             {
-                this.ReplyToCommand(e.SenderInfo, "Usage: sm unban <steamid|ip> [reason]");
+                this.ReplyToCommand(e.Client, "Usage: sm unban <steamid|ip> [reason]");
                 return;
             }
 
@@ -640,10 +640,10 @@ namespace SevenMod.Plugin.SourceBans
         /// <param name="e">A <see cref="QueryCompletedEventArgs"/> object containing the event data.</param>
         private void OnCheckPlayerBansQueryCompleted(object sender, QueryCompletedEventArgs e)
         {
-            var client = (ClientInfo)e.Data;
+            var client = (SMClient)e.Data;
             if (!e.Success)
             {
-                this.recheckPlayers.Add(client.playerId);
+                this.recheckPlayers.Add(client.PlayerId);
                 if (this.banRecheckTimer == null)
                 {
                     this.banRecheckTimer = new Timer(this.retryTime.AsFloat * 1000);
@@ -665,14 +665,14 @@ namespace SevenMod.Plugin.SourceBans
                     this.database.TFastQuery($"UPDATE {prefix}_bans SET `ip` = '{ip}' WHERE `bid` = '{bid}'");
                 }
 
-                var auth = GetAuth(client.playerId).Substring(8);
-                var name = this.database.Escape(client.playerName);
-                this.database.TFastQuery($"INSERT INTO {prefix}_banlog (sid, time, name, bid) VALUES ({this.serverId.AsInt}, UNIX_TIMESTAMP(), '{name}', (SELECT bid FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR(type = 1 AND ip = '{client.ip}')) AND RemoveType IS NULL LIMIT 0, 1))");
+                var auth = GetAuth(client.PlayerId).Substring(8);
+                var name = this.database.Escape(client.PlayerName);
+                this.database.TFastQuery($"INSERT INTO {prefix}_banlog (sid, time, name, bid) VALUES ({this.serverId.AsInt}, UNIX_TIMESTAMP(), '{name}', (SELECT bid FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR(type = 1 AND ip = '{client.Ip}')) AND RemoveType IS NULL LIMIT 0, 1))");
 
-                this.ServerCommand($"kick {client.playerId} \"You have been banned from this server, check {this.website.AsString} for more info\"");
+                this.ServerCommand($"kick {client.PlayerId} \"You have been banned from this server, check {this.website.AsString} for more info\"");
             }
 
-            this.cache.SetPlayerStatus(client.playerId, e.Results.Rows.Count > 0, 60 * 5);
+            this.cache.SetPlayerStatus(client.PlayerId, e.Results.Rows.Count > 0, 60 * 5);
         }
 
         /// <summary>
@@ -689,7 +689,7 @@ namespace SevenMod.Plugin.SourceBans
             this.recheckPlayers.Clear();
             foreach (var playerId in list)
             {
-                var client = ConnectionManager.Instance.Clients.ForPlayerId(playerId);
+                var client = ClientHelper.ForPlayerId(playerId);
                 if (client != null)
                 {
                     this.CheckBans(client);
@@ -710,11 +710,11 @@ namespace SevenMod.Plugin.SourceBans
                 var prefix = this.databasePrefix.AsString;
                 var bid = e.Results.Rows[0].ItemArray.GetValue(0).ToString();
                 var reason = (args.Arguments.Count > 1) ? this.database.Escape(string.Join(" ", args.Arguments.GetRange(1, args.Arguments.Count - 1).ToArray())) : string.Empty;
-                var adminAuth = (args.SenderInfo.RemoteClientInfo != null) ? GetAuth(args.SenderInfo.RemoteClientInfo.playerId) : "STEAM_ID_SERVER";
-                var adminIp = (args.SenderInfo.RemoteClientInfo != null) ? args.SenderInfo.RemoteClientInfo.ip : string.Empty;
+                var adminAuth = (args.Client != null) ? GetAuth(args.Client.PlayerId) : "STEAM_ID_SERVER";
+                var adminIp = (args.Client != null) ? args.Client.Ip : string.Empty;
                 this.database.TFastQuery($"UPDATE {prefix}_bans SET RemovedBy = (SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), RemoveType = 'U', RemovedOn = UNIX_TIMESTAMP(), ureason = '{reason}' WHERE bid = {bid}");
 
-                this.ReplyToCommand(args.SenderInfo, $"{args.Arguments[0]} has been unbanned.");
+                this.ReplyToCommand(args.Client, $"{args.Arguments[0]} has been unbanned.");
             }
         }
 
