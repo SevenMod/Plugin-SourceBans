@@ -141,18 +141,20 @@ namespace SevenMod.Plugin.SourceBans
         /// <inheritdoc/>
         public override void OnConfigsExecuted()
         {
+            PluginManager.Unload("BaseBans");
+
+            this.LoadTranslations("SourceBans.Plugin");
+
             this.database = Database.Connect("sourcebans");
 
             this.backupDatabase = Database.OpenSQLiteDatabase("sourcebans-queue");
             this.backupDatabase.TFastQuery("CREATE TABLE IF NOT EXISTS queue (auth TEXT PRIMARY KEY ON CONFLICT REPLACE, ip TEXT, name TEXT, duration INTEGER, start_time INTEGER, reason TEXT, admin_auth TEXT, admin_ip TEXT);");
 
-            PluginManager.Unload("BaseBans");
-
-            this.RegAdminCmd("rehash", AdminFlags.RCON, "Reload SQL admins").Executed += this.OnRehashCommandExecuted;
-            this.RegAdminCmd("ban", AdminFlags.Ban, "sm ban <#userid|name> <minutes|0> [reason]").Executed += this.OnBanCommandExecuted;
-            this.RegAdminCmd("banip", AdminFlags.Ban, "sm banip <ip|#userid|name> <time> [reason]").Executed += this.OnBanipCommandExecuted;
-            this.RegAdminCmd("addban", AdminFlags.RCON, "sm addban <time> <steamid> [reason]").Executed += this.OnAddbanCommandExecuted;
-            this.RegAdminCmd("unban", AdminFlags.Unban, "sm unban <steamid|ip> [reason]").Executed += this.OnUnbanCommandExecuted;
+            this.RegAdminCmd("rehash", AdminFlags.RCON, "Rehash Description").Executed += this.OnRehashCommandExecuted;
+            this.RegAdminCmd("ban", AdminFlags.Ban, "Ban Description").Executed += this.OnBanCommandExecuted;
+            this.RegAdminCmd("banip", AdminFlags.Ban, "Banip Description").Executed += this.OnBanipCommandExecuted;
+            this.RegAdminCmd("addban", AdminFlags.RCON, "Addban Description").Executed += this.OnAddbanCommandExecuted;
+            this.RegAdminCmd("unban", AdminFlags.Unban, "Unban Description").Executed += this.OnUnbanCommandExecuted;
 
             this.retryTime.ConVar.ValueChanged += this.OnRetryTimeChanged;
             this.processQueueTime.ConVar.ValueChanged += this.OnProcessQueueTimeChanged;
@@ -191,7 +193,7 @@ namespace SevenMod.Plugin.SourceBans
             {
                 if (banned)
                 {
-                    rejectReason.AppendLine($"You have been banned from this server, check {this.website.AsString} for more info");
+                    rejectReason.AppendLine(this.GetString("You Are Banned", client, this.website.AsString));
                     return false;
                 }
 
@@ -355,7 +357,7 @@ namespace SevenMod.Plugin.SourceBans
 
             if (duration == 0 && !AdminManager.CheckAccess(e.Client, AdminFlags.Unban))
             {
-                this.ReplyToCommand(e.Client, "You do not have perm ban permission.");
+                this.ReplyToCommand(e.Client, "No Perm Ban");
                 return;
             }
 
@@ -369,9 +371,9 @@ namespace SevenMod.Plugin.SourceBans
                 var adminIp = (e.Client != null) ? e.Client.Ip : string.Empty;
                 this.InsertBan(auth, target.Ip, name, GetTime(), duration, reason, adminAuth, adminIp);
 
-                this.ServerCommand($"kick {target.PlayerId} \"You have been banned from this server, check {this.website.AsString} for more info\"");
+                this.ServerCommand(this.GetString("Kick Command", target, target.PlayerId, this.website.AsString));
 
-                this.ReplyToCommand(e.Client, $"{name} has been banned.");
+                this.ReplyToCommand(e.Client, "Player Banned", name);
             }
         }
 
@@ -396,7 +398,7 @@ namespace SevenMod.Plugin.SourceBans
 
             if (duration == 0 && !AdminManager.CheckAccess(e.Client, AdminFlags.Unban))
             {
-                this.ReplyToCommand(e.Client, "You do not have perm ban permission.");
+                this.ReplyToCommand(e.Client, "No Perm Ban");
                 return;
             }
 
@@ -409,9 +411,9 @@ namespace SevenMod.Plugin.SourceBans
                 var adminIp = (e.Client != null) ? e.Client.Ip : string.Empty;
                 this.InsertBan(string.Empty, target.Ip, name, GetTime(), duration, reason, adminAuth, adminIp);
 
-                this.ServerCommand($"kick {target.PlayerId} \"You have been banned by this server, check {this.website.AsString} for more info\"");
+                this.ServerCommand(this.GetString("Kick Command", target, target.PlayerId, this.website.AsString));
 
-                this.ReplyToCommand(e.Client, $"{name} has been banned.");
+                this.ReplyToCommand(e.Client, "Player Banned", name);
             }
         }
 
@@ -424,7 +426,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (!this.addban.AsBool)
             {
-                this.ReplyToCommand(e.Client, "The addban command is disabled.");
+                this.ReplyToCommand(e.Client, "Addban Disabled");
                 return;
             }
 
@@ -454,13 +456,17 @@ namespace SevenMod.Plugin.SourceBans
                 var adminIp = (e.Client != null) ? e.Client.Ip : string.Empty;
                 this.InsertBan(auth, string.Empty, string.Empty, GetTime(), duration, reason, adminAuth, adminIp);
 
-                this.ServerCommand($"kick {playerId} \"You are banned from this server, check {this.website.AsString} for more info\"");
+                var target = ClientHelper.ForPlayerId(playerId);
+                if (target != null)
+                {
+                    this.ServerCommand(this.GetString("Kick Command", target, target.PlayerId, this.website.AsString));
+                }
 
-                this.ReplyToCommand(e.Client, $"{e.Arguments[1]} has been banned.");
+                this.ReplyToCommand(e.Client, "Player Banned", playerId);
             }
             else
             {
-                this.ReplyToCommand(e.Client, $"{e.Arguments[1]} is not a valid SteamID.");
+                this.ReplyToCommand(e.Client, "Invalid player ID", e.Arguments[1]);
             }
         }
 
@@ -473,7 +479,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (!this.unban.AsBool)
             {
-                this.ReplyToCommand(e.Client, $"The unban command is disabled. You must use the Web interface at {this.website.AsString}.");
+                this.ReplyToCommand(e.Client, "Unban Disabled", this.website.AsString);
                 return;
             }
 
@@ -669,7 +675,7 @@ namespace SevenMod.Plugin.SourceBans
                 var name = this.database.Escape(client.PlayerName);
                 this.database.TFastQuery($"INSERT INTO {prefix}_banlog (sid, time, name, bid) VALUES ({this.serverId.AsInt}, UNIX_TIMESTAMP(), '{name}', (SELECT bid FROM {prefix}_bans WHERE ((type = 0 AND authid REGEXP '^STEAM_[0-9]:{auth}$') OR(type = 1 AND ip = '{client.Ip}')) AND RemoveType IS NULL LIMIT 0, 1))");
 
-                this.ServerCommand($"kick {client.PlayerId} \"You have been banned from this server, check {this.website.AsString} for more info\"");
+                this.ServerCommand(this.GetString("Kick Command", client, client.PlayerId, this.website.AsString));
             }
 
             this.cache.SetPlayerStatus(client.PlayerId, e.Results.Rows.Count > 0, 60 * 5);
@@ -714,7 +720,7 @@ namespace SevenMod.Plugin.SourceBans
                 var adminIp = (args.Client != null) ? args.Client.Ip : string.Empty;
                 this.database.TFastQuery($"UPDATE {prefix}_bans SET RemovedBy = (SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), RemoveType = 'U', RemovedOn = UNIX_TIMESTAMP(), ureason = '{reason}' WHERE bid = {bid}");
 
-                this.ReplyToCommand(args.Client, $"{args.Arguments[0]} has been unbanned.");
+                this.ReplyToCommand(args.Client, "Player Unbanned", args.Arguments[0]);
             }
         }
 

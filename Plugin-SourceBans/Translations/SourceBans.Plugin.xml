@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Phrases>
+  <Phrase Name="Addban Description">
+    <en>Adds a player to the SourceBans ban list</en>
+  </Phrase>
+  <Phrase Name="Ban Description">
+    <en>Bans a player from the server</en>
+  </Phrase>
+  <Phrase Name="Banip Description">
+    <en>Bans a player from the server by their IP address</en>
+  </Phrase>
+  <Phrase Name="Rehash Description">
+    <en>Reloads SourceBans admins</en>
+  </Phrase>
+  <Phrase Name="Unban Description">
+    <en>Unbans a player from the server</en>
+  </Phrase>
+  <Phrase Name="Invalid ban duration">
+    <en>Invalid ban duration</en>
+  </Phrase>
+  <Phrase Name="No Perm Ban">
+    <en>You do not have perm ban permission</en>
+  </Phrase>
+  <Phrase Name="Invalid player ID">
+    <Format>{1:s}</Format>
+    <en>{1} is not a valid SteamID</en>
+  </Phrase>
+  <Phrase Name="Addban Disabled">
+    <en>The addban command is disabled</en>
+  </Phrase>
+  <Phrase Name="Unban Disabled">
+    <Format>{1:s}</Format>
+    <en>The unban command is disabled. You must use the Web interface at {1}.</en>
+  </Phrase>
+  <Phrase Name="You Are Banned">
+    <Format>{1:s}</Format>
+    <en>You have been banned from this server, check {1} for more info</en>
+  </Phrase>
+  <Phrase Name="Player Banned">
+    <Format>{1:s}</Format>
+    <en>{1} has been banned</en>
+  </Phrase>
+  <Phrase Name="Player Unbanned">
+    <Format>{1:s}</Format>
+    <en>{1} has been unbanned</en>
+  </Phrase>
+  <Phrase Name="Kick Command">
+    <Format>{1:s},{2:s}</Format>
+    <en>kick {1} "You have been banned from this server, check {2} for more info"</en>
+  </Phrase>
+</Phrases>
