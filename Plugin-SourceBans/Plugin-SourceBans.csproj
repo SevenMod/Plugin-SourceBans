@@ -72,7 +72,9 @@
     <PostBuildEvent>
 rmdir "$(ProjectDir)..\bin" /s /q
 mkdir "$(ProjectDir)..\bin\Plugins"
+mkdir "$(ProjectDir)..\bin\Translations"
 copy "$(ProjectDir)$(OutDir)Plugin.SourceBans.dll" "$(ProjectDir)..\bin\Plugins\SourceBans.dll"
+xcopy "$(ProjectDir)$(OutDir)Translations" "$(ProjectDir)..\bin\Translations" /e /y /i /c
 </PostBuildEvent>
   </PropertyGroup>
 </Project>
