@@ -48,4 +48,20 @@
     <Format>{1:s},{2:s}</Format>
     <en>kick {1} "You have been banned from this server, check {2} for more info"</en>
   </Phrase>
+  <Phrase Name="Permabanned player">
+    <Format>{1:s}</Format>
+    <en>Permanently banned player "{1}".</en>
+  </Phrase>
+  <Phrase Name="Permabanned player reason">
+    <Format>{1:s},{2:s}</Format>
+    <en>Permanently banned player "{1}" (reason: {2}).</en>
+  </Phrase>
+  <Phrase Name="Banned player">
+    <Format>{1:s},{2:d}</Format>
+    <en>Banned player "{1}" for {2} minutes.</en>
+  </Phrase>
+  <Phrase Name="Banned player reason">
+    <Format>{1:s},{2:d},{3:s}</Format>
+    <en>Banned player "{1}" for {2} minutes (reason: {3}).</en>
+  </Phrase>
 </Phrases>

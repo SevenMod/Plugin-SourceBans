@@ -363,10 +363,34 @@ namespace SevenMod.Plugin.SourceBans
 
             if (this.ParseSingleTargetString(e.Client, e.Arguments[0], out var target))
             {
+                var reason = (e.Arguments.Count > 2) ? string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray()) : string.Empty;
+                if (string.IsNullOrEmpty(reason))
+                {
+                    if (duration == 0)
+                    {
+                        this.ShowActivity(e.Client, "Permabanned player", target.PlayerName);
+                    }
+                    else
+                    {
+                        this.ShowActivity(e.Client, "Banned player", target.PlayerName, duration);
+                    }
+                }
+                else
+                {
+                    if (duration == 0)
+                    {
+                        this.ShowActivity(e.Client, "Permabanned player reason", target.PlayerName, reason);
+                    }
+                    else
+                    {
+                        this.ShowActivity(e.Client, "Banned player reason", target.PlayerName, duration, reason);
+                    }
+                }
+
                 var auth = GetAuth(target.PlayerId);
                 var name = this.database.Escape(target.PlayerName);
                 duration *= 60;
-                var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
+                reason = this.database.Escape(reason);
                 var adminAuth = (e.Client != null) ? GetAuth(e.Client.PlayerId) : "STEAM_ID_SERVER";
                 var adminIp = (e.Client != null) ? e.Client.Ip : string.Empty;
                 this.InsertBan(auth, target.Ip, name, GetTime(), duration, reason, adminAuth, adminIp);
