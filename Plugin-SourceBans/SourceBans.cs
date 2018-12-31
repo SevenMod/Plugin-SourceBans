@@ -332,7 +332,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (this.enableAdmins.AsBool)
             {
-                this.LogAction(e.Client, null, "\"{1:L}\" refreshed the admin cache.", e.Client);
+                this.LogAction(e.Client, null, "\"{0:L}\" refreshed the admin cache.", e.Client);
                 AdminManager.ReloadAdmins();
             }
         }
@@ -365,7 +365,7 @@ namespace SevenMod.Plugin.SourceBans
             if (this.ParseSingleTargetString(e.Client, e.Arguments[0], out var target))
             {
                 var reason = (e.Arguments.Count > 2) ? string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray()) : string.Empty;
-                this.LogAction(e.Client, target, "\"{1:L}\" banned \"{2:L}\" (minutes \"{3:d}\") (reason \"{4:s}\")", e.Client, target, duration, reason);
+                this.LogAction(e.Client, target, "\"{0:L}\" banned \"{1:L}\" (minutes \"{2:d}\") (reason \"{3:s}\")", e.Client, target, duration, reason);
                 if (string.IsNullOrEmpty(reason))
                 {
                     if (duration == 0)
@@ -431,7 +431,7 @@ namespace SevenMod.Plugin.SourceBans
             if (this.ParseSingleTargetString(e.Client, e.Arguments[0], out var target))
             {
                 var reason = (e.Arguments.Count > 2) ? string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray()) : string.Empty;
-                this.LogAction(e.Client, target, "\"{1:L}\" added ban (minutes \"{2:d}\") (ip \"{3:s}\") (reason \"{4:s}\")", e.Client, duration, target.Ip, reason);
+                this.LogAction(e.Client, target, "\"{0:L}\" added ban (minutes \"{1:d}\") (ip \"{2:s}\") (reason \"{3:s}\")", e.Client, duration, target.Ip, reason);
 
                 var name = this.database.Escape(target.PlayerName);
                 duration *= 60;
@@ -480,7 +480,7 @@ namespace SevenMod.Plugin.SourceBans
             {
                 var auth = GetAuth(playerId);
                 var reason = (e.Arguments.Count > 2) ? string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray()) : string.Empty;
-                this.LogAction(e.Client, null, "\"{1:L}\" added ban (minutes \"{2:d}\") (id \"{3:s}\") (reason \"{4:s})", e.Client, 0, auth, reason);
+                this.LogAction(e.Client, null, "\"{0:L}\" added ban (minutes \"{1:d}\") (id \"{2:s}\") (reason \"{3:s})", e.Client, 0, auth, reason);
 
                 duration *= 60;
                 reason = this.database.Escape(reason);
@@ -746,7 +746,7 @@ namespace SevenMod.Plugin.SourceBans
             {
                 var args = (AdminCommandEventArgs)e.Data;
                 var reason = (args.Arguments.Count > 1) ? string.Join(" ", args.Arguments.GetRange(1, args.Arguments.Count - 1).ToArray()) : string.Empty;
-                this.LogAction(args.Client, null, "\"{1:L}\" removed ban (filter \"{2:s}\") (reason \"{3:s}\")", args.Client, args.Arguments[0], reason);
+                this.LogAction(args.Client, null, "\"{0:L}\" removed ban (filter \"{1:s}\") (reason \"{2:s}\")", args.Client, args.Arguments[0], reason);
 
                 var prefix = this.databasePrefix.AsString;
                 var bid = e.Results.Rows[0].ItemArray.GetValue(0).ToString();
