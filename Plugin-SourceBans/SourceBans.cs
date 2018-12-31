@@ -332,6 +332,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (this.enableAdmins.AsBool)
             {
+                this.LogAction(e.Client, null, "\"{1:L}\" refreshed the admin cache.", e.Client);
                 AdminManager.ReloadAdmins();
             }
         }
@@ -364,6 +365,7 @@ namespace SevenMod.Plugin.SourceBans
             if (this.ParseSingleTargetString(e.Client, e.Arguments[0], out var target))
             {
                 var reason = (e.Arguments.Count > 2) ? string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray()) : string.Empty;
+                this.LogAction(e.Client, target, "\"{1:L}\" banned \"{2:L}\" (minutes \"{3:d}\") (reason \"{4:s}\")", e.Client, target, duration, reason);
                 if (string.IsNullOrEmpty(reason))
                 {
                     if (duration == 0)
@@ -428,9 +430,12 @@ namespace SevenMod.Plugin.SourceBans
 
             if (this.ParseSingleTargetString(e.Client, e.Arguments[0], out var target))
             {
+                var reason = (e.Arguments.Count > 2) ? string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray()) : string.Empty;
+                this.LogAction(e.Client, target, "\"{1:L}\" added ban (minutes \"{2:d}\") (ip \"{3:s}\") (reason \"{4:s}\")", e.Client, duration, target.Ip, reason);
+
                 var name = this.database.Escape(target.PlayerName);
                 duration *= 60;
-                var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
+                reason = this.database.Escape(reason);
                 var adminAuth = (e.Client != null) ? GetAuth(e.Client.PlayerId) : "STEAM_ID_SERVER";
                 var adminIp = (e.Client != null) ? e.Client.Ip : string.Empty;
                 this.InsertBan(string.Empty, target.Ip, name, GetTime(), duration, reason, adminAuth, adminIp);
@@ -474,8 +479,11 @@ namespace SevenMod.Plugin.SourceBans
             if (SteamUtils.NormalizeSteamId(e.Arguments[1], out var playerId))
             {
                 var auth = GetAuth(playerId);
+                var reason = (e.Arguments.Count > 2) ? string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray()) : string.Empty;
+                this.LogAction(e.Client, null, "\"{1:L}\" added ban (minutes \"{2:d}\") (id \"{3:s}\") (reason \"{4:s})", e.Client, 0, auth, reason);
+
                 duration *= 60;
-                var reason = (e.Arguments.Count > 2) ? this.database.Escape(string.Join(" ", e.Arguments.GetRange(2, e.Arguments.Count - 2).ToArray())) : string.Empty;
+                reason = this.database.Escape(reason);
                 var adminAuth = (e.Client != null) ? GetAuth(e.Client.PlayerId) : "STEAM_ID_SERVER";
                 var adminIp = (e.Client != null) ? e.Client.Ip : string.Empty;
                 this.InsertBan(auth, string.Empty, string.Empty, GetTime(), duration, reason, adminAuth, adminIp);
@@ -737,9 +745,12 @@ namespace SevenMod.Plugin.SourceBans
             if (e.Results.Rows.Count > 0)
             {
                 var args = (AdminCommandEventArgs)e.Data;
+                var reason = (args.Arguments.Count > 1) ? string.Join(" ", args.Arguments.GetRange(1, args.Arguments.Count - 1).ToArray()) : string.Empty;
+                this.LogAction(args.Client, null, "\"{1:L}\" removed ban (filter \"{2:s}\") (reason \"{3:s}\")", args.Client, args.Arguments[0], reason);
+
                 var prefix = this.databasePrefix.AsString;
                 var bid = e.Results.Rows[0].ItemArray.GetValue(0).ToString();
-                var reason = (args.Arguments.Count > 1) ? this.database.Escape(string.Join(" ", args.Arguments.GetRange(1, args.Arguments.Count - 1).ToArray())) : string.Empty;
+                reason = this.database.Escape(reason);
                 var adminAuth = (args.Client != null) ? GetAuth(args.Client.PlayerId) : "STEAM_ID_SERVER";
                 var adminIp = (args.Client != null) ? args.Client.Ip : string.Empty;
                 this.database.TFastQuery($"UPDATE {prefix}_bans SET RemovedBy = (SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), RemoveType = 'U', RemovedOn = UNIX_TIMESTAMP(), ureason = '{reason}' WHERE bid = {bid}");
