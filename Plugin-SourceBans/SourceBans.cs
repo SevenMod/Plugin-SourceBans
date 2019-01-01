@@ -141,14 +141,14 @@ namespace SevenMod.Plugin.SourceBans
         /// <inheritdoc/>
         public override void OnConfigsExecuted()
         {
-            PluginManager.Unload("BaseBans");
-
-            this.LoadTranslations("SourceBans.Plugin");
-
             this.database = Database.Connect("sourcebans");
 
             this.backupDatabase = Database.OpenSQLiteDatabase("sourcebans-queue");
             this.backupDatabase.TFastQuery("CREATE TABLE IF NOT EXISTS queue (auth TEXT PRIMARY KEY ON CONFLICT REPLACE, ip TEXT, name TEXT, duration INTEGER, start_time INTEGER, reason TEXT, admin_auth TEXT, admin_ip TEXT);");
+
+            PluginManager.Unload("BaseBans");
+
+            this.LoadTranslations("SourceBans.Plugin");
 
             this.RegAdminCmd("rehash", AdminFlags.RCON, "Rehash Description").Executed += this.OnRehashCommandExecuted;
             this.RegAdminCmd("ban", AdminFlags.Ban, "Ban Description").Executed += this.OnBanCommandExecuted;
