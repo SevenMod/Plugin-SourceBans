@@ -346,7 +346,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (e.Arguments.Count < 2)
             {
-                this.ReplyToCommand(e.Client, "Usage: sm ban <#userid|name> <time|0> [reason]");
+                e.Command.PrintUsage(e.Client, "<{0:t}> <{1:t}|0> [{2:t}]", "target", "minutes", "reason");
                 return;
             }
 
@@ -412,7 +412,7 @@ namespace SevenMod.Plugin.SourceBans
         {
             if (e.Arguments.Count < 2)
             {
-                this.ReplyToCommand(e.Client, "Usage: sm banip <ip|#userid|name> <time> [reason]");
+                e.Command.PrintUsage(e.Client, "<ip|{0:t}> <{1:t}|0> [{2:t}]", "target", "minutes", "reason");
                 return;
             }
 
@@ -461,7 +461,7 @@ namespace SevenMod.Plugin.SourceBans
 
             if (e.Arguments.Count < 2)
             {
-                this.ReplyToCommand(e.Client, "Usage: sm addban <time> <steamid> [reason]");
+                e.Command.PrintUsage(e.Client, "<{0:t}|0> <playerId> [{1:t}]", "minutes", "reason");
                 return;
             }
 
@@ -517,7 +517,7 @@ namespace SevenMod.Plugin.SourceBans
 
             if (e.Arguments.Count < 1)
             {
-                this.ReplyToCommand(e.Client, "Usage: sm unban <steamid|ip> [reason]");
+                e.Command.PrintUsage(e.Client, "<playerId|ip> [{0:t}]", "reason");
                 return;
             }
 
