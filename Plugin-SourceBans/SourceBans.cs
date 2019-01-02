@@ -563,9 +563,10 @@ namespace SevenMod.Plugin.SourceBans
             var ends = startTime + duration;
             this.database.TFastQuery($"INSERT INTO {prefix}_bans (type, authid, ip, name, created, ends, length, reason, aid, adminIp, sid, country) VALUES ({type}, '{auth}', '{ip}', '{name}', {startTime}, {ends}, {duration}, '{reason}', IFNULL((SELECT aid FROM {prefix}_admins WHERE authid = '{adminAuth}' OR authid REGEXP '^STEAM_[0-9]:{adminAuth.Substring(8)}$'), '0'), '{adminIp}', {this.serverId.AsInt}, ' ')", data).QueryCompleted += this.OnInsertBanQueryCompleted;
 
-            if (ends <= GetTime())
+            if (ends > GetTime())
             {
-                this.cache.SetPlayerStatus(auth, true, duration);
+                SteamUtils.NormalizeSteamId(auth, out var playerId);
+                this.cache.SetPlayerStatus(playerId, true);
             }
         }
 
@@ -710,7 +711,7 @@ namespace SevenMod.Plugin.SourceBans
                 this.ServerCommand(this.GetString("Kick Command", client, client.PlayerId, this.website.AsString));
             }
 
-            this.cache.SetPlayerStatus(client.PlayerId, e.Results.Rows.Count > 0, 60 * 5);
+            this.cache.SetPlayerStatus(client.PlayerId, e.Results.Rows.Count > 0);
         }
 
         /// <summary>

@@ -52,12 +52,11 @@ namespace SevenMod.Plugin.SourceBans
         /// </summary>
         /// <param name="playerId">The identifier of the player.</param>
         /// <param name="banned">A value indicating whether the player is banned.</param>
-        /// <param name="ttl">The time in seconds before the cache entry is considered expired.</param>
-        public void SetPlayerStatus(string playerId, bool banned, uint ttl)
+        public void SetPlayerStatus(string playerId, bool banned)
         {
             this.playerStatus[playerId] = new Entry<bool>
             {
-                Expires = DateTime.Now.AddSeconds(ttl),
+                Expires = DateTime.Now.AddMinutes(5),
                 Value = banned,
             };
         }
