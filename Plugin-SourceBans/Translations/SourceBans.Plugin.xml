@@ -18,9 +18,6 @@
   <Phrase Name="minutes">
     <en>minutes</en>
   </Phrase>
-  <Phrase Name="reason">
-    <en>reason</en>
-  </Phrase>
   <Phrase Name="Invalid ban duration">
     <en>Invalid ban duration</en>
   </Phrase>
