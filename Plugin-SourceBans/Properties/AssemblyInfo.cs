@@ -1,5 +1,5 @@
-﻿// <copyright file="AssemblyInfo.cs" company="Steve Guidetti">
-// Copyright (c) Steve Guidetti. All rights reserved.
+﻿// <copyright file="AssemblyInfo.cs" company="StevoTVR">
+// Copyright (c) StevoTVR. All rights reserved.
 // Licensed under the MIT license. See LICENSE.txt file in the project root for full license information.
 // </copyright>
 
@@ -15,7 +15,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("SevenMod")]
-[assembly: AssemblyCopyright("Steve Guidetti")]
+[assembly: AssemblyCopyright("Steve 'StevoTVR' Guidetti")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

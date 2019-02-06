@@ -1,5 +1,5 @@
-﻿// <copyright file="SourceBans.cs" company="Steve Guidetti">
-// Copyright (c) Steve Guidetti. All rights reserved.
+﻿// <copyright file="SourceBans.cs" company="StevoTVR">
+// Copyright (c) StevoTVR. All rights reserved.
 // Licensed under the MIT license. See LICENSE.txt file in the project root for full license information.
 // </copyright>
 
