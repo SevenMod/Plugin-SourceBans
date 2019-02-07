@@ -117,7 +117,7 @@ namespace SevenMod.Plugin.SourceBans
             Name = "SourceBans",
             Author = "SevenMod",
             Description = "Integrates SevenMod with the SourceBans backend.",
-            Version = "0.1.0.0",
+            Version = "0.1.0",
             Website = "https://github.com/SevenMod/Plugin-SourceBans"
         };
 
