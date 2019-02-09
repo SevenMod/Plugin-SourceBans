@@ -23,10 +23,10 @@ File: **SourceBans.xml**
 
 | Command     | Arguments (_\<required\> [optional]_)  | Access | Description                                       |
 | ----------- | -------------------------------------- | ------ | ------------------------------------------------- |
-| `sm rehash` |                                        | RCON   | Reloads SourceBans admins                         |
+| `sm addban` | \<minutes\|0\> \<playerId\> [reason]   | RCON   | Adds a player to the SourceBans ban list          |
 | `sm ban`    | \<target\> \<minutes\|0\> [reason]     | Ban    | Bans a player from the server                     |
 | `sm banip`  | \<ip\|target\> \<minutes\|0\> [reason] | Ban    | Bans a player from the server by their IP address |
-| `sm addban` | \<minutes\|0\> \<playerId\> [reason]   | RCON   | Adds a player to the SourceBans ban list          |
+| `sm rehash` |                                        | RCON   | Reloads SourceBans admins                         |
 | `sm unban`  | \<playerId\|ip\> [reason]              | Unban  | Unbans a player from the server                   |
 
 ## License
