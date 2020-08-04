@@ -1,0 +1,70 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Phrases>
+  <Phrase Name="Addban Description">
+    <ru>Добавляет игрока в список банов SourceBans</ru>
+  </Phrase>
+  <Phrase Name="Ban Description">
+    <ru>Забанить игрока с сервера</ru>
+  </Phrase>
+  <Phrase Name="Banip Description">
+    <ru>Забанить игрока с сервера по его IP-адресу</ru>
+  </Phrase>
+  <Phrase Name="Rehash Description">
+    <ru>Перезагрузка администраторов SourceBans</ru>
+  </Phrase>
+  <Phrase Name="Unban Description">
+    <ru>Разбанить игрока с сервера</ru>
+  </Phrase>
+  <Phrase Name="minutes">
+    <ru>минут</ru>
+  </Phrase>
+  <Phrase Name="Invalid ban duration">
+    <ru>Неверная продолжительность бана</ru>
+  </Phrase>
+  <Phrase Name="No Perm Ban">
+    <ru>У вас нет разрешения на перманентный бан</ru>
+  </Phrase>
+  <Phrase Name="Invalid player ID">
+    <Format>{1:s}</Format>
+    <ru>{1} не является действительным SteamID</ru>
+  </Phrase>
+  <Phrase Name="Addban Disabled">
+    <ru>Команда addban отключена</ru>
+  </Phrase>
+  <Phrase Name="Unban Disabled">
+    <Format>{1:s}</Format>
+    <ru>Команда разбана отключена. Вы должны использовать веб-интерфейс на {1}.</ru>
+  </Phrase>
+  <Phrase Name="You Are Banned">
+    <Format>{1:s}</Format>
+    <ru>Вы были забанены с этого сервера, проверьте {1} для получения дополнительной информации</ru>
+  </Phrase>
+  <Phrase Name="Player Banned">
+    <Format>{1:s}</Format>
+    <ru>{1} был забанен</ru>
+  </Phrase>
+  <Phrase Name="Player Unbanned">
+    <Format>{1:s}</Format>
+    <ru>{1} был разбанен</ru>
+  </Phrase>
+  <Phrase Name="Kick Command">
+    <Format>{1:s},{2:s}</Format>
+    <ru>выгнать {1} "Вы были забанены с этого сервера, проверьте {2} для получения дополнительной информации"</ru>
+  </Phrase>
+  <Phrase Name="Permabanned player">
+    <Format>{1:s}</Format>
+    <ru>Забанен перманентно игрок "{1}".</ru>
+  </Phrase>
+  <Phrase Name="Permabanned player reason">
+    <Format>{1:s},{2:s}</Format>
+    <ru>Забанен перманентно игрок "{1}" (причина: {2}).</ru>
+  </Phrase>
+  <Phrase Name="Banned player">
+    <Format>{1:s},{2:d}</Format>
+    <ru>Забанен игрок "{1}" на {2} минут.</ru>
+  </Phrase>
+  <Phrase Name="Banned player reason">
+    <Format>{1:s},{2:d},{3:s}</Format>
+    <ru>Забанен игрок "{1}" на {2} минут (причина: {3}).</ru>
+  </Phrase>
+</Phrases>
